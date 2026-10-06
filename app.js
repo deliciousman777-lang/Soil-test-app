@@ -3,6 +3,7 @@ const STORAGE_KEY = 'soil-test-app-v1';
 const state = {
   data: loadData(),
   currentProjectId: null,
+  editingTestId: null,
 };
 
 const projectView = document.getElementById('projectView');
@@ -15,6 +16,8 @@ const projectDialog = document.getElementById('projectDialog');
 const moistureDialog = document.getElementById('moistureDialog');
 const projectForm = document.getElementById('projectForm');
 const moistureForm = document.getElementById('moistureForm');
+const moistureDialogTitle = document.getElementById('moistureDialogTitle');
+const moistureSubmitBtn = document.getElementById('moistureSubmitBtn');
 
 function loadData() {
   try {
@@ -77,27 +80,62 @@ function closeProject() {
   renderProjects();
 }
 
+function testMeasurements(test) {
+  if (Array.isArray(test.measurements) && test.measurements.length) return test.measurements;
+  if (test.containerMass != null && test.wetMass != null && test.dryMass != null) {
+    return [{
+      containerNo: test.containerNo || '',
+      containerMass: Number(test.containerMass),
+      wetMass: Number(test.wetMass),
+      dryMass: Number(test.dryMass),
+      moisture: Number(test.moisture),
+    }];
+  }
+  return [];
+}
+
+function averageForTest(test) {
+  if (Number.isFinite(Number(test.moistureAverage))) return Number(test.moistureAverage);
+  const values = testMeasurements(test).map(m => Number(m.moisture)).filter(Number.isFinite);
+  if (values.length) return values.reduce((a,b) => a + b, 0) / values.length;
+  return Number(test.moisture) || 0;
+}
+
 function renderTests() {
   const p = currentProject();
   if (!p) return;
   testList.innerHTML = '';
-  const tests = [...p.tests].sort((a,b) => b.createdAt.localeCompare(a.createdAt));
+  const tests = [...p.tests].sort((a,b) => (b.updatedAt || b.createdAt).localeCompare(a.updatedAt || a.createdAt));
   emptyTests.classList.toggle('hidden', tests.length > 0);
 
   tests.forEach(test => {
+    const measurements = testMeasurements(test);
+    const rows = measurements.map((m, index) => `
+      <div class="measurement-row">
+        <strong>${measurements.length === 1 ? '測定' : `測定 ${index + 1}`}</strong>
+        <span>容器 ${escapeHtml(m.containerNo || '—')}</span>
+        <span>${Number(m.moisture).toFixed(1)} %</span>
+      </div>
+    `).join('');
+
     const card = document.createElement('article');
     card.className = 'card';
     card.innerHTML = `
-      <h3>含水比試験 ${escapeHtml(test.sample)}</h3>
-      <p>容器 ${escapeHtml(test.containerNo || '—')} ｜ ${new Date(test.createdAt).toLocaleString('ja-JP')}</p>
-      <div class="value">${test.moisture.toFixed(1)} %</div>
-      <div class="meta">
-        <span>容器 ${format(test.containerMass)} g</span>
-        <span>湿潤 ${format(test.wetMass)} g</span>
-        <span>乾燥 ${format(test.dryMass)} g</span>
+      <div class="card-title-row">
+        <div>
+          <h3>含水比試験 ${escapeHtml(test.sample)}</h3>
+          <p>${new Date(test.createdAt).toLocaleString('ja-JP')}${test.updatedAt ? ' ｜ 訂正済み' : ''}</p>
+        </div>
+        <button type="button" class="edit-btn" data-edit-test="${escapeHtml(test.id)}">訂正</button>
       </div>
+      <div class="value">${averageForTest(test).toFixed(1)} % <small>平均</small></div>
+      <div class="measurement-summary">${rows}</div>
     `;
     testList.appendChild(card);
+  });
+
+  testList.querySelectorAll('[data-edit-test]').forEach(btn => {
+    btn.addEventListener('click', () => openEditMoisture(btn.dataset.editTest));
   });
 }
 
@@ -105,19 +143,85 @@ function format(n) {
   return Number(n).toLocaleString('ja-JP', { maximumFractionDigits: 3 });
 }
 
-function moistureValue() {
-  const c = Number(moistureForm.elements.containerMass.value);
-  const wet = Number(moistureForm.elements.wetMass.value);
-  const dry = Number(moistureForm.elements.dryMass.value);
+function readMeasurement(index) {
+  const cRaw = moistureForm.elements[`containerMass${index}`].value.trim();
+  const wetRaw = moistureForm.elements[`wetMass${index}`].value.trim();
+  const dryRaw = moistureForm.elements[`dryMass${index}`].value.trim();
+  if (!cRaw || !wetRaw || !dryRaw) return null;
+
+  const c = Number(cRaw);
+  const wet = Number(wetRaw);
+  const dry = Number(dryRaw);
   const water = wet - dry;
   const drySoil = dry - c;
   if (![c, wet, dry].every(Number.isFinite) || drySoil <= 0 || water < 0) return null;
-  return (water / drySoil) * 100;
+
+  return {
+    containerNo: moistureForm.elements[`containerNo${index}`].value.trim(),
+    containerMass: c,
+    wetMass: wet,
+    dryMass: dry,
+    moisture: (water / drySoil) * 100,
+  };
+}
+
+function getAllMeasurements() {
+  const measurements = [1,2,3].map(readMeasurement);
+  return measurements.every(Boolean) ? measurements : null;
 }
 
 function updateMoisturePreview() {
-  const value = moistureValue();
-  document.getElementById('moisturePreview').textContent = value == null ? '含水比：—' : `含水比：${value.toFixed(1)} %`;
+  const values = [];
+  [1,2,3].forEach(index => {
+    const m = readMeasurement(index);
+    const el = document.getElementById(`moisture${index}`);
+    if (m) {
+      values.push(m.moisture);
+      el.textContent = `${m.moisture.toFixed(1)} %`;
+    } else {
+      el.textContent = '— %';
+    }
+  });
+
+  const preview = document.getElementById('moisturePreview');
+  if (values.length === 3) {
+    const average = values.reduce((a,b) => a + b, 0) / 3;
+    preview.textContent = `平均含水比：${average.toFixed(1)} %`;
+  } else {
+    preview.textContent = '平均含水比：—';
+  }
+}
+
+function resetMoistureDialog() {
+  state.editingTestId = null;
+  moistureForm.reset();
+  moistureDialogTitle.textContent = '含水比試験';
+  moistureSubmitBtn.textContent = '保存';
+  updateMoisturePreview();
+}
+
+function openEditMoisture(testId) {
+  const p = currentProject();
+  const test = p?.tests.find(t => t.id === testId);
+  if (!test) return;
+
+  state.editingTestId = testId;
+  moistureForm.reset();
+  moistureDialogTitle.textContent = '含水比試験を訂正';
+  moistureSubmitBtn.textContent = '訂正を保存';
+  moistureForm.elements.sample.value = test.sample || '';
+
+  const measurements = testMeasurements(test);
+  measurements.slice(0, 3).forEach((m, i) => {
+    const index = i + 1;
+    moistureForm.elements[`containerNo${index}`].value = m.containerNo || '';
+    moistureForm.elements[`containerMass${index}`].value = m.containerMass ?? '';
+    moistureForm.elements[`wetMass${index}`].value = m.wetMass ?? '';
+    moistureForm.elements[`dryMass${index}`].value = m.dryMass ?? '';
+  });
+
+  updateMoisturePreview();
+  moistureDialog.showModal();
 }
 
 projectForm.addEventListener('submit', e => {
@@ -145,29 +249,46 @@ projectForm.addEventListener('submit', e => {
 moistureForm.addEventListener('input', updateMoisturePreview);
 moistureForm.addEventListener('submit', e => {
   e.preventDefault();
-  const moisture = moistureValue();
-  if (moisture == null) {
-    alert('質量の値を確認してください。湿潤質量 ≥ 乾燥質量 > 容器質量になるよう入力してください。');
+  const measurements = getAllMeasurements();
+  if (!measurements) {
+    alert('3測定すべての質量を確認してください。各測定で「湿潤質量 ≥ 乾燥質量 > 容器質量」になるよう入力してください。');
     return;
   }
+
   const p = currentProject();
   if (!p) return;
-  const fd = new FormData(moistureForm);
-  p.tests.push({
-    id: uid(),
-    type: 'moisture',
-    sample: String(fd.get('sample')).trim(),
-    containerNo: String(fd.get('containerNo')).trim(),
-    containerMass: Number(fd.get('containerMass')),
-    wetMass: Number(fd.get('wetMass')),
-    dryMass: Number(fd.get('dryMass')),
-    moisture,
-    createdAt: new Date().toISOString(),
-  });
-  p.updatedAt = new Date().toISOString();
+  const sample = moistureForm.elements.sample.value.trim();
+  if (!sample) return;
+
+  const average = measurements.reduce((sum, m) => sum + m.moisture, 0) / measurements.length;
+  const now = new Date().toISOString();
+
+  if (state.editingTestId) {
+    const test = p.tests.find(t => t.id === state.editingTestId);
+    if (!test) return;
+    test.sample = sample;
+    test.measurements = measurements;
+    test.moistureAverage = average;
+    test.updatedAt = now;
+    delete test.containerNo;
+    delete test.containerMass;
+    delete test.wetMass;
+    delete test.dryMass;
+    delete test.moisture;
+  } else {
+    p.tests.push({
+      id: uid(),
+      type: 'moisture',
+      sample,
+      measurements,
+      moistureAverage: average,
+      createdAt: now,
+    });
+  }
+
+  p.updatedAt = now;
   saveData();
-  moistureForm.reset();
-  updateMoisturePreview();
+  resetMoistureDialog();
   moistureDialog.close();
   renderTests();
 });
@@ -175,8 +296,7 @@ moistureForm.addEventListener('submit', e => {
 document.getElementById('newProjectBtn').addEventListener('click', () => projectDialog.showModal());
 document.getElementById('backBtn').addEventListener('click', closeProject);
 document.getElementById('addMoistureBtn').addEventListener('click', () => {
-  moistureForm.reset();
-  updateMoisturePreview();
+  resetMoistureDialog();
   moistureDialog.showModal();
 });
 document.getElementById('deleteProjectBtn').addEventListener('click', () => {
