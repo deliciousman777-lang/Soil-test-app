@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#f4f7f6" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="土質試験" />
+  <title>土質試験データシート</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">SOIL TEST</p>
+      <h1>土質試験データシート</h1>
+    </div>
+    <button id="newProjectBtn" class="primary">＋ 工事件名</button>
+  </header>
+
+  <main>
+    <section id="projectView">
+      <div class="section-head">
+        <div>
+          <h2>工事件名</h2>
+          <p>端末内に保存されます</p>
+        </div>
+      </div>
+      <div id="projectList" class="cards"></div>
+      <div id="emptyProjects" class="empty">
+        <strong>まだ工事件名がありません</strong>
+        <span>「＋ 工事件名」から作成してください。</span>
+      </div>
+    </section>
+
+    <section id="detailView" class="hidden">
+      <button id="backBtn" class="back">← 工事件名一覧</button>
+      <div class="detail-title">
+        <div>
+          <p class="eyebrow">PROJECT</p>
+          <h2 id="projectTitle"></h2>
+          <p id="projectMeta"></p>
+        </div>
+        <button id="deleteProjectBtn" class="danger ghost">削除</button>
+      </div>
+
+      <div class="panel">
+        <div class="section-head">
+          <div>
+            <h3>試験データ</h3>
+            <p>まずは含水比を実装。ほかの試験もここへ追加していきます。</p>
+          </div>
+          <button id="addMoistureBtn" class="primary">＋ 含水比</button>
+        </div>
+        <div id="testList" class="cards"></div>
+        <div id="emptyTests" class="empty compact">
+          <strong>試験データがありません</strong>
+          <span>「＋ 含水比」で入力を始められます。</span>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="projectDialog">
+    <form id="projectForm" method="dialog">
+      <div class="dialog-head">
+        <h2>工事件名を作成</h2>
+        <button type="button" class="icon-btn" data-close="projectDialog">×</button>
+      </div>
+      <label>工事件名<input name="name" required autocomplete="off" placeholder="例：○○道路改良工事" /></label>
+      <label>場所<input name="location" autocomplete="off" placeholder="例：奈良県○○市" /></label>
+      <label>発注者 / 依頼者<input name="client" autocomplete="off" placeholder="任意" /></label>
+      <div class="dialog-actions">
+        <button type="button" class="ghost" data-close="projectDialog">キャンセル</button>
+        <button class="primary" value="default">作成</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="moistureDialog">
+    <form id="moistureForm" method="dialog">
+      <div class="dialog-head">
+        <div>
+          <p class="eyebrow">JIS A 1203</p>
+          <h2>含水比試験</h2>
+        </div>
+        <button type="button" class="icon-btn" data-close="moistureDialog">×</button>
+      </div>
+
+      <div class="grid2">
+        <label>試料名 / No.<input name="sample" required autocomplete="off" placeholder="例：No.1" /></label>
+        <label>容器番号<input name="containerNo" autocomplete="off" placeholder="例：A-12" /></label>
+      </div>
+
+      <div class="measurement-grid">
+        <label>容器質量 (g)
+          <div class="voice-input"><input name="containerMass" inputmode="decimal" required placeholder="0.00" /><button type="button" class="mic" data-voice="containerMass" aria-label="音声入力">🎤</button></div>
+        </label>
+        <label>容器＋湿潤土 (g)
+          <div class="voice-input"><input name="wetMass" inputmode="decimal" required placeholder="0.00" /><button type="button" class="mic" data-voice="wetMass" aria-label="音声入力">🎤</button></div>
+        </label>
+        <label>容器＋乾燥土 (g)
+          <div class="voice-input"><input name="dryMass" inputmode="decimal" required placeholder="0.00" /><button type="button" class="mic" data-voice="dryMass" aria-label="音声入力">🎤</button></div>
+        </label>
+      </div>
+
+      <div id="moisturePreview" class="result-box">含水比：—</div>
+      <p class="hint">🎤 を押して「123.45」のように話すと数値を入力できます。Safariで使えない場合はiPhone標準キーボードのマイクでも入力できます。</p>
+
+      <div class="dialog-actions">
+        <button type="button" class="ghost" data-close="moistureDialog">キャンセル</button>
+        <button class="primary" value="default">保存</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>
