@@ -23,28 +23,36 @@ h2,h3,p{margin-top:0}
 .primary,.ghost,.back,.danger{border:0;border-radius:12px;padding:12px 15px;font-weight:700}
 .primary{background:var(--accent);color:white;box-shadow:0 4px 12px rgba(30,111,92,.18)}
 .primary:active{background:var(--accent-dark)}
+.primary.secondary{background:#285d78}
 .ghost,.back{background:white;color:#23302d;border:1px solid var(--line)}
 .danger{color:var(--danger)}
 .back{margin-bottom:18px}
+.test-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
 .cards{display:grid;gap:12px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;box-shadow:0 3px 14px rgba(24,38,34,.04)}
 .card-button{width:100%;text-align:left;color:inherit}
 .card h3{margin:0 0 6px;font-size:17px}
 .card p{margin:0;color:var(--muted);font-size:13px}
+.test-kind{font-size:11px!important;font-weight:800;color:var(--accent)!important;letter-spacing:.05em;margin-bottom:4px!important}
 .card .value{font-size:28px;font-weight:800;color:var(--accent);margin-top:12px}
 .card .value small{font-size:12px;color:var(--muted);font-weight:700}
-.card .meta{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px}
+.card .meta{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;color:var(--muted);font-size:13px}
 .card-title-row{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
 .edit-btn{border:1px solid #b9c7c3;background:#f7faf9;color:var(--accent-dark);border-radius:10px;padding:8px 12px;font-weight:800;white-space:nowrap}
 .measurement-summary{display:grid;gap:6px;margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
 .measurement-row{display:grid;grid-template-columns:72px 1fr auto;gap:8px;align-items:center;font-size:13px;color:var(--muted)}
 .measurement-row strong{color:#33403d}
 .measurement-row span:last-child{color:var(--accent-dark);font-weight:800}
+.fraction-card-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px}
+.fraction-card-row div{background:#f3f8f6;border-radius:12px;padding:10px;text-align:center}
+.fraction-card-row span{display:block;font-size:11px;color:var(--muted);margin-bottom:3px}
+.fraction-card-row strong{font-size:17px;color:var(--accent-dark)}
 .empty{border:1px dashed #b9c7c3;border-radius:16px;padding:32px 20px;text-align:center;color:var(--muted);display:flex;flex-direction:column;gap:6px}
 .empty strong{color:#33403d}.empty.compact{padding:24px}
 .hidden{display:none!important}
 .panel{margin-top:18px;background:#eef3f1;border-radius:20px;padding:16px}
-dialog{width:min(94vw,680px);max-height:92vh;border:0;border-radius:22px;padding:0;box-shadow:0 24px 80px rgba(0,0,0,.22)}
+dialog{width:min(94vw,680px);max-height:92vh;overflow:auto;border:0;border-radius:22px;padding:0;box-shadow:0 24px 80px rgba(0,0,0,.22)}
+dialog.wide-dialog{width:min(96vw,900px)}
 dialog::backdrop{background:rgba(12,20,18,.48);backdrop-filter:blur(2px)}
 dialog form{padding:20px}.dialog-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px}.dialog-head h2{margin-bottom:0}
 .icon-btn{border:0;background:#eef3f1;width:38px;height:38px;border-radius:50%;font-size:24px;line-height:1}
@@ -58,8 +66,32 @@ input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(30,111,92,.12)}
 .specimen-head strong{font-size:15px}
 .specimen-head span{font-size:18px;font-weight:800;color:var(--accent)}
 .voice-input{display:flex;gap:8px}.voice-input input{margin-top:7px}.mic{margin-top:7px;min-width:50px;border:1px solid #cfdad6;background:#f7faf9;border-radius:12px;font-size:20px}.mic.listening{animation:pulse 1s infinite}
+.mic.mini{margin:0;min-width:38px;width:38px;height:38px;font-size:16px;padding:0}
 @keyframes pulse{50%{transform:scale(1.05);background:#e5f5ef}}
 .result-box{background:#173f35;color:white;padding:18px;border-radius:14px;font-size:22px;font-weight:800;text-align:center;margin:14px 0 10px}
 .hint{font-size:12px;color:var(--muted);line-height:1.5}
-.dialog-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px;position:sticky;bottom:-20px;background:white;padding:12px 0 20px}
-@media(max-width:560px){.topbar{align-items:flex-start}.topbar h1{font-size:17px}.topbar .primary{padding:10px 12px;font-size:13px}.grid2{grid-template-columns:1fr}.detail-title{align-items:center}.measurement-row{grid-template-columns:62px 1fr auto}}
+.table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:14px;background:white;-webkit-overflow-scrolling:touch}
+.grain-table{border-collapse:collapse;width:100%;min-width:650px;font-size:13px}
+.grain-table th,.grain-table td{border-bottom:1px solid var(--line);padding:9px 10px;text-align:right;white-space:nowrap}
+.grain-table thead th{background:#eef4f2;color:#43504d;font-size:12px;position:sticky;top:0;z-index:1}
+.grain-table th:first-child{text-align:left}
+.grain-table tbody th{font-weight:800;color:#33403d}
+.grain-table tbody th small{display:block;font-size:9px;color:var(--accent);margin-top:2px}
+.grain-table tr:last-child th,.grain-table tr:last-child td{border-bottom:0}
+.grain-table .boundary-row{background:#f3faf7}
+.grain-table input{margin:0;padding:9px;width:105px;text-align:right}
+.table-voice-input{display:flex;align-items:center;justify-content:flex-end;gap:6px}
+.mass-check{margin:10px 0 12px;padding:11px 12px;border-radius:11px;background:#f1f5f4;color:#53605d;font-size:12px}
+.mass-check.error{background:#fff0ee;color:var(--danger);font-weight:700}
+.fraction-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.fraction-grid div{border:1px solid var(--line);background:#f8fbfa;border-radius:14px;padding:14px;text-align:center}
+.fraction-grid span,.fraction-grid small{display:block;color:var(--muted);font-size:11px}
+.fraction-grid strong{display:block;color:var(--accent);font-size:24px;margin:4px 0}
+.dialog-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px;position:sticky;bottom:-20px;background:white;padding:12px 0 20px;z-index:3}
+@media(max-width:560px){
+  .topbar{align-items:flex-start}.topbar h1{font-size:17px}.topbar .primary{padding:10px 12px;font-size:13px}
+  .grid2{grid-template-columns:1fr}.detail-title{align-items:center}.measurement-row{grid-template-columns:62px 1fr auto}
+  .section-head{flex-direction:column}.test-actions{width:100%;justify-content:stretch}.test-actions button{flex:1}
+  .fraction-grid{grid-template-columns:1fr 1fr 1fr;gap:6px}.fraction-grid div{padding:10px 5px}.fraction-grid strong{font-size:18px}
+  .fraction-card-row{gap:5px}.fraction-card-row div{padding:8px 4px}.fraction-card-row strong{font-size:15px}
+}
