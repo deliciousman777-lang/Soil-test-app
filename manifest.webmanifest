@@ -1,0 +1,10 @@
+{
+  "name": "土質試験データシート",
+  "short_name": "土質試験",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f4f7f6",
+  "theme_color": "#f4f7f6",
+  "lang": "ja",
+  "description": "工事件名ごとに土質試験データを端末内保存するPWA"
+}
