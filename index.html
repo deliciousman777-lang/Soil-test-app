@@ -84,34 +84,51 @@
       <div class="dialog-head">
         <div>
           <p class="eyebrow">JIS A 1203</p>
-          <h2>含水比試験</h2>
+          <h2 id="moistureDialogTitle">含水比試験</h2>
         </div>
         <button type="button" class="icon-btn" data-close="moistureDialog">×</button>
       </div>
 
-      <div class="grid2">
-        <label>試料名 / No.<input name="sample" required autocomplete="off" placeholder="例：No.1" /></label>
-        <label>容器番号<input name="containerNo" autocomplete="off" placeholder="例：A-12" /></label>
+      <label>試料名 / No.<input name="sample" required autocomplete="off" placeholder="例：No.1" /></label>
+
+      <div class="specimen-list">
+        <section class="specimen-card">
+          <div class="specimen-head"><strong>測定 1</strong><span id="moisture1">— %</span></div>
+          <label>容器番号<input name="containerNo1" autocomplete="off" placeholder="例：A-12" /></label>
+          <div class="measurement-grid">
+            <label>容器質量 (g)<div class="voice-input"><input name="containerMass1" inputmode="decimal" required placeholder="0.00" /><button type="button" class="mic" data-voice="containerMass1" aria-label="音声入力">🎤</button></div></label>
+            <label>容器＋湿潤土 (g)<div class="voice-input"><input name="wetMass1" inputmode="decimal" required placeholder="0.00" /><button type="button" class="mic" data-voice="wetMass1" aria-label="音声入力">🎤</button></div></label>
+            <label>容器＋乾燥土 (g)<div class="voice-input"><input name="dryMass1" inputmode="decimal" required placeholder="0.00" /><button type="button" class="mic" data-voice="dryMass1" aria-label="音声入力">🎤</button></div></label>
+          </div>
+        </section>
+
+        <section class="specimen-card">
+          <div class="specimen-head"><strong>測定 2</strong><span id="moisture2">— %</span></div>
+          <label>容器番号<input name="containerNo2" autocomplete="off" placeholder="例：A-13" /></label>
+          <div class="measurement-grid">
+            <label>容器質量 (g)<div class="voice-input"><input name="containerMass2" inputmode="decimal" required placeholder="0.00" /><button type="button" class="mic" data-voice="containerMass2" aria-label="音声入力">🎤</button></div></label>
+            <label>容器＋湿潤土 (g)<div class="voice-input"><input name="wetMass2" inputmode="decimal" required placeholder="0.00" /><button type="button" class="mic" data-voice="wetMass2" aria-label="音声入力">🎤</button></div></label>
+            <label>容器＋乾燥土 (g)<div class="voice-input"><input name="dryMass2" inputmode="decimal" required placeholder="0.00" /><button type="button" class="mic" data-voice="dryMass2" aria-label="音声入力">🎤</button></div></label>
+          </div>
+        </section>
+
+        <section class="specimen-card">
+          <div class="specimen-head"><strong>測定 3</strong><span id="moisture3">— %</span></div>
+          <label>容器番号<input name="containerNo3" autocomplete="off" placeholder="例：A-14" /></label>
+          <div class="measurement-grid">
+            <label>容器質量 (g)<div class="voice-input"><input name="containerMass3" inputmode="decimal" required placeholder="0.00" /><button type="button" class="mic" data-voice="containerMass3" aria-label="音声入力">🎤</button></div></label>
+            <label>容器＋湿潤土 (g)<div class="voice-input"><input name="wetMass3" inputmode="decimal" required placeholder="0.00" /><button type="button" class="mic" data-voice="wetMass3" aria-label="音声入力">🎤</button></div></label>
+            <label>容器＋乾燥土 (g)<div class="voice-input"><input name="dryMass3" inputmode="decimal" required placeholder="0.00" /><button type="button" class="mic" data-voice="dryMass3" aria-label="音声入力">🎤</button></div></label>
+          </div>
+        </section>
       </div>
 
-      <div class="measurement-grid">
-        <label>容器質量 (g)
-          <div class="voice-input"><input name="containerMass" inputmode="decimal" required placeholder="0.00" /><button type="button" class="mic" data-voice="containerMass" aria-label="音声入力">🎤</button></div>
-        </label>
-        <label>容器＋湿潤土 (g)
-          <div class="voice-input"><input name="wetMass" inputmode="decimal" required placeholder="0.00" /><button type="button" class="mic" data-voice="wetMass" aria-label="音声入力">🎤</button></div>
-        </label>
-        <label>容器＋乾燥土 (g)
-          <div class="voice-input"><input name="dryMass" inputmode="decimal" required placeholder="0.00" /><button type="button" class="mic" data-voice="dryMass" aria-label="音声入力">🎤</button></div>
-        </label>
-      </div>
-
-      <div id="moisturePreview" class="result-box">含水比：—</div>
-      <p class="hint">🎤 を押して「123.45」のように話すと数値を入力できます。Safariで使えない場合はiPhone標準キーボードのマイクでも入力できます。</p>
+      <div id="moisturePreview" class="result-box">平均含水比：—</div>
+      <p class="hint">3測定の含水比を自動計算し、その平均値を表示します。🎤 またはiPhone標準キーボードのマイクでも入力できます。</p>
 
       <div class="dialog-actions">
         <button type="button" class="ghost" data-close="moistureDialog">キャンセル</button>
-        <button class="primary" value="default">保存</button>
+        <button id="moistureSubmitBtn" class="primary" value="default">保存</button>
       </div>
     </form>
   </dialog>
