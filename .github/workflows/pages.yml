@@ -27,6 +27,19 @@ jobs:
         run: |
           node --check app.js
           node --check sedimentation.js
+          node --check grain-charts.js
+      - name: Prepare Pages bundle
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('index.html')
+          s = p.read_text(encoding='utf-8')
+          tag = '  <script src="grain-charts.js"></script>'
+          if tag not in s:
+              anchor = '  <script src="sedimentation.js"></script>'
+              s = s.replace(anchor, anchor + '\n' + tag)
+              p.write_text(s, encoding='utf-8')
+          PY
       - name: Setup Pages
         uses: actions/configure-pages@v5
         with:
