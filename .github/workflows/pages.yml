@@ -30,6 +30,7 @@ jobs:
           node --check hydrometer-input.js
           node --check grain-charts.js
           node --check fine-sieve.js
+          node --check dvalue-spline.js
       - name: Prepare Pages bundle
         run: |
           python - <<'PY'
@@ -40,12 +41,15 @@ jobs:
           hydro = '  <script src="hydrometer-input.js"></script>'
           grain = '  <script src="grain-charts.js"></script>'
           fine = '  <script src="fine-sieve.js"></script>'
+          spline = '  <script src="dvalue-spline.js"></script>'
           if hydro not in s:
               s = s.replace(sed, sed + '\n' + hydro)
           if grain not in s:
               s = s.replace(hydro, hydro + '\n' + grain)
           if fine not in s:
               s = s.replace(grain, grain + '\n' + fine)
+          if spline not in s:
+              s = s.replace(fine, fine + '\n' + spline)
           p.write_text(s, encoding='utf-8')
           PY
       - name: Setup Pages
