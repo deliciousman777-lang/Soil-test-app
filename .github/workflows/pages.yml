@@ -28,6 +28,7 @@ jobs:
           node --check app.js
           node --check sedimentation.js
           node --check hydrometer-input.js
+          node --check sedimentation-cm-fix.js
           node --check grain-charts.js
           node --check fine-sieve.js
           node --check dvalue-spline.js
@@ -39,13 +40,16 @@ jobs:
           s = p.read_text(encoding='utf-8')
           sed = '  <script src="sedimentation.js"></script>'
           hydro = '  <script src="hydrometer-input.js"></script>'
+          sedfix = '  <script src="sedimentation-cm-fix.js"></script>'
           grain = '  <script src="grain-charts.js"></script>'
           fine = '  <script src="fine-sieve.js"></script>'
           spline = '  <script src="dvalue-spline.js"></script>'
           if hydro not in s:
               s = s.replace(sed, sed + '\n' + hydro)
+          if sedfix not in s:
+              s = s.replace(hydro, hydro + '\n' + sedfix)
           if grain not in s:
-              s = s.replace(hydro, hydro + '\n' + grain)
+              s = s.replace(sedfix, sedfix + '\n' + grain)
           if fine not in s:
               s = s.replace(grain, grain + '\n' + fine)
           if spline not in s:
