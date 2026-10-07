@@ -1,10 +1,19 @@
 {
-  "name": "土質試験データシート",
-  "short_name": "土質試験",
+  "name": "SoilNote",
+  "short_name": "SoilNote",
   "start_url": "./",
+  "scope": "./",
   "display": "standalone",
-  "background_color": "#f4f7f6",
-  "theme_color": "#f4f7f6",
+  "background_color": "#0b5136",
+  "theme_color": "#0b5136",
   "lang": "ja",
-  "description": "工事件名ごとに土質試験データを端末内保存するPWA"
+  "description": "土質試験データを工事件名ごとに記録・整理するSoilNote",
+  "icons": [
+    {
+      "src": "icons/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
 }
