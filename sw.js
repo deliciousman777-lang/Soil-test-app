@@ -1,5 +1,5 @@
-const CACHE = 'soil-test-cache-v3';
-const ASSETS = ['./','./index.html','./styles.css','./app.js','./manifest.webmanifest'];
+const CACHE = 'soil-test-cache-v4';
+const ASSETS = ['./','./index.html','./styles.css','./app.js','./sedimentation.js','./manifest.webmanifest'];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(ASSETS)));
