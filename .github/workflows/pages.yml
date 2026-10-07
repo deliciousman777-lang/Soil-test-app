@@ -34,6 +34,7 @@ jobs:
           node --check dvalue-spline.js
           node --check particle-density.js
           node --check pycnometer-master.js
+          node --check report-sheet.js
       - name: Prepare Pages bundle
         run: |
           python - <<'PY'
@@ -48,6 +49,7 @@ jobs:
           spline = '  <script src="dvalue-spline.js"></script>'
           pd = '  <script src="particle-density.js"></script>'
           pyc = '  <script src="pycnometer-master.js"></script>'
+          report = '  <script src="report-sheet.js"></script>'
           if hydro not in s:
               s = s.replace(sed, sed + '\n' + hydro)
           if sedfix not in s:
@@ -62,6 +64,8 @@ jobs:
               s = s.replace(spline, spline + '\n' + pd)
           if pyc not in s:
               s = s.replace(pd, pd + '\n' + pyc)
+          if report not in s:
+              s = s.replace(pyc, pyc + '\n' + report)
           p.write_text(s, encoding='utf-8')
           PY
       - name: Setup Pages
