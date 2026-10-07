@@ -1,4 +1,4 @@
-const CACHE = 'soil-test-cache-v5';
+const CACHE = 'soil-test-cache-v6';
 const ASSETS = ['./','./index.html','./styles.css','./app.js','./sedimentation.js','./grain-charts.js','./manifest.webmanifest'];
 
 self.addEventListener('install', event => {
