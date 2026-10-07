@@ -1,4 +1,4 @@
-const CACHE = 'soil-test-cache-v13';
+const CACHE = 'soil-test-cache-v14';
 const ASSETS = ['./','./index.html','./styles.css','./app.js','./sedimentation.js','./hydrometer-input.js','./sedimentation-cm-fix.js','./grain-charts.js','./fine-sieve.js','./dvalue-spline.js','./particle-density.js','./pycnometer-master.js','./manifest.webmanifest'];
 
 self.addEventListener('install', event => {
