@@ -45,6 +45,7 @@ function buildSedimentationRows() {
 }
 
 function sedimentationSettingsExt() {
+  const cylinderNo = grainForm.elements.cylinderNo?.value.trim() ?? '';
   const ms1 = Number(grainForm.elements.sedDryMass?.value);
   const rhoS = Number(grainForm.elements.particleDensity?.value);
   const cm = Number(grainForm.elements.meniscusCorrection?.value);
@@ -54,7 +55,7 @@ function sedimentationSettingsExt() {
   const rhoW = sedWaterDensity(refTemp);
   const valid = [ms1, rhoS, cm, volume, refTemp, ratio].every(Number.isFinite) && ms1 > 0 && rhoS > 1 && volume > 0 && ratio >= 0 && ratio <= 100 && Number.isFinite(rhoW) && rhoS > rhoW;
   const M = valid ? (volume / ms1) * (rhoS / (rhoS - rhoW)) * rhoW * 100 : null;
-  return { valid, ms1, rhoS, cm, volume, refTemp, ratio, rhoW, M };
+  return { valid, cylinderNo, ms1, rhoS, cm, volume, refTemp, ratio, rhoW, M };
 }
 
 function readSedimentationRowsExt(settings) {
@@ -131,7 +132,7 @@ function getSedimentationPayloadExt() {
   if (entered.length !== 8 || entered.some(r => !r.valid)) return { enabled: true, valid: false, reason: 'rows' };
   const outOfRange = entered.some(r => r.P < 0 || r.P > 105 || r.overall < 0 || r.overall > 105);
   if (outOfRange) return { enabled: true, valid: false, reason: 'range' };
-  return { enabled: true, valid: true, settings: { ms1: settings.ms1, rhoS: settings.rhoS, cm: settings.cm, volume: settings.volume, referenceTemp: settings.refTemp, twoMmPassRatio: settings.ratio, rhoW: settings.rhoW, M: settings.M }, rows: entered };
+  return { enabled: true, valid: true, settings: { cylinderNo: settings.cylinderNo, ms1: settings.ms1, rhoS: settings.rhoS, cm: settings.cm, volume: settings.volume, referenceTemp: settings.refTemp, twoMmPassRatio: settings.ratio, rhoW: settings.rhoW, M: settings.M }, rows: entered };
 }
 
 function syncTwoMmPassingRatio() {
@@ -162,6 +163,7 @@ openEditGrain = function(testId) {
   const sed = test.sedimentation;
   if (useSedimentationEl) useSedimentationEl.checked = Boolean(sed?.enabled);
   if (sed?.settings) {
+    grainForm.elements.cylinderNo.value = sed.settings.cylinderNo ?? '';
     grainForm.elements.sedDryMass.value = sed.settings.ms1 ?? '';
     grainForm.elements.particleDensity.value = sed.settings.rhoS ?? '';
     grainForm.elements.meniscusCorrection.value = sed.settings.cm ?? '';
@@ -169,6 +171,7 @@ openEditGrain = function(testId) {
     grainForm.elements.referenceTemp.value = sed.settings.referenceTemp ?? 20;
     grainForm.elements.twoMmPassRatio.value = sed.settings.twoMmPassRatio ?? '';
   } else {
+    grainForm.elements.cylinderNo.value = '';
     grainForm.elements.suspensionVolume.value = '1000';
     grainForm.elements.referenceTemp.value = '20';
   }
@@ -190,7 +193,9 @@ renderGrainCard = function(test) {
   let html = baseRenderGrainCard(test);
   if (test.sedimentation?.enabled) {
     html = html.replace('粒度試験・ふるい分析', '粒度試験・沈降分析あり');
-    html = html.replace('<span>ふるい分析</span>', '<span>沈降分析 8点</span>');
+    const cylinderNo = test.sedimentation?.settings?.cylinderNo;
+    const sedLabel = cylinderNo ? `メスシリンダー No.${escapeHtml(cylinderNo)} ｜ 沈降分析 8点` : '沈降分析 8点';
+    html = html.replace('<span>ふるい分析</span>', `<span>${sedLabel}</span>`);
   }
   return html;
 };
