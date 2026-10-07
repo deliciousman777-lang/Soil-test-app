@@ -27,6 +27,7 @@ jobs:
         run: |
           node --check app.js
           node --check sedimentation.js
+          node --check hydrometer-input.js
           node --check grain-charts.js
           node --check fine-sieve.js
       - name: Prepare Pages bundle
@@ -35,11 +36,14 @@ jobs:
           from pathlib import Path
           p = Path('index.html')
           s = p.read_text(encoding='utf-8')
+          sed = '  <script src="sedimentation.js"></script>'
+          hydro = '  <script src="hydrometer-input.js"></script>'
           grain = '  <script src="grain-charts.js"></script>'
           fine = '  <script src="fine-sieve.js"></script>'
+          if hydro not in s:
+              s = s.replace(sed, sed + '\n' + hydro)
           if grain not in s:
-              anchor = '  <script src="sedimentation.js"></script>'
-              s = s.replace(anchor, anchor + '\n' + grain)
+              s = s.replace(hydro, hydro + '\n' + grain)
           if fine not in s:
               s = s.replace(grain, grain + '\n' + fine)
           p.write_text(s, encoding='utf-8')
