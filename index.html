@@ -74,14 +74,11 @@
     <form id="grainForm" method="dialog">
       <div class="dialog-head"><div><p class="eyebrow">JIS A 1204 / JGS 0131</p><h2 id="grainDialogTitle">粒度試験</h2></div><button type="button" class="icon-btn" data-close="grainDialog">×</button></div>
       <div class="grid2"><label>試料名 / No.<input name="sample" required autocomplete="off" placeholder="例：No.1" /></label><label>全試料の乾燥質量 (g)<div class="voice-input"><input name="totalDryMass" inputmode="decimal" required placeholder="例：500.00" /><button type="button" class="mic" data-voice="totalDryMass" data-form="grainForm">🎤</button></div></label></div>
-
       <div class="subsection-head"><div><span class="step-badge">1</span><strong>ふるい分析</strong></div><p>使用したふるいだけ残留質量を入力。2 mm と 0.075 mm は区分計算に使用。</p></div>
       <div class="table-wrap"><table class="grain-table"><thead><tr><th>ふるい径</th><th>残留質量 (g)</th><th>加積残留 (g)</th><th>通過率 (%)</th></tr></thead><tbody id="grainRows"></tbody></table></div>
       <div id="grainMassCheck" class="mass-check">残留質量を入力すると計算します。</div>
       <div class="fraction-grid"><div><span>礫分</span><strong id="gravelPct">— %</strong><small>2 mm以上</small></div><div><span>砂分</span><strong id="sandPct">— %</strong><small>0.075〜2 mm</small></div><div><span>細粒分</span><strong id="finesPct">— %</strong><small>0.075 mm未満</small></div></div>
-
       <div class="sed-toggle-box"><div><div class="subsection-head compact-head"><div><span class="step-badge">2</span><strong>沈降分析</strong></div></div><p class="hint">沈降分析を行う場合だけON。1・2・5・15・30・60・240・1440分で入力します。</p></div><label class="switch-label"><input id="useSedimentation" name="useSedimentation" type="checkbox" /><span>沈降分析を行う</span></label></div>
-
       <section id="sedimentationSection" class="hidden">
         <div class="sed-settings">
           <label>沈降分析用試料の乾燥質量 ms1 (g)<div class="voice-input"><input name="sedDryMass" inputmode="decimal" placeholder="例：73.4" /><button type="button" class="mic" data-voice="sedDryMass" data-form="grainForm">🎤</button></div></label>
@@ -101,5 +98,6 @@
     </form>
   </dialog>
   <script src="app.js"></script>
+  <script src="sedimentation.js"></script>
 </body>
 </html>
