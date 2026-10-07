@@ -74,7 +74,24 @@ jobs:
               s = s.replace(report, report + '\n' + reporttern)
           if att not in s:
               s = s.replace(reporttern, reporttern + '\n' + att)
+
+          s = s.replace('<meta name="theme-color" content="#f4f7f6" />', '<meta name="theme-color" content="#0b5136" />')
+          s = s.replace('<meta name="apple-mobile-web-app-title" content="土質試験" />', '<meta name="apple-mobile-web-app-title" content="SoilNote" />')
+          s = s.replace('<title>土質試験データシート</title>', '<title>SoilNote</title>')
+          if '<meta name="application-name" content="SoilNote" />' not in s:
+              s = s.replace('<meta name="apple-mobile-web-app-title" content="SoilNote" />', '<meta name="apple-mobile-web-app-title" content="SoilNote" />\n  <meta name="application-name" content="SoilNote" />')
+          if '<link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />' not in s:
+              s = s.replace('<link rel="manifest" href="manifest.webmanifest" />', '<link rel="manifest" href="manifest.webmanifest" />\n  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />')
+          s = s.replace('<h1>土質試験データシート</h1>', '<h1>SoilNote</h1>')
           p.write_text(s, encoding='utf-8')
+          PY
+          base64 -d icons/apple-touch-icon.b64 > icons/apple-touch-icon.png
+          rm -f icons/apple-touch-icon.b64 icons/.keep icons/test.txt
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('icons/apple-touch-icon.png')
+          assert p.exists() and p.stat().st_size > 10000, 'icon decode failed'
+          assert p.read_bytes()[:8] == b'\x89PNG\r\n\x1a\n', 'not a PNG'
           PY
       - name: Setup Pages
         uses: actions/configure-pages@v5
