@@ -35,6 +35,7 @@ jobs:
           node --check particle-density.js
           node --check pycnometer-master.js
           node --check report-sheet.js
+          node --check report-ternary-fix.js
       - name: Prepare Pages bundle
         run: |
           python - <<'PY'
@@ -50,6 +51,7 @@ jobs:
           pd = '  <script src="particle-density.js"></script>'
           pyc = '  <script src="pycnometer-master.js"></script>'
           report = '  <script src="report-sheet.js"></script>'
+          reporttern = '  <script src="report-ternary-fix.js"></script>'
           if hydro not in s:
               s = s.replace(sed, sed + '\n' + hydro)
           if sedfix not in s:
@@ -66,6 +68,8 @@ jobs:
               s = s.replace(pd, pd + '\n' + pyc)
           if report not in s:
               s = s.replace(pyc, pyc + '\n' + report)
+          if reporttern not in s:
+              s = s.replace(report, report + '\n' + reporttern)
           p.write_text(s, encoding='utf-8')
           PY
       - name: Setup Pages
