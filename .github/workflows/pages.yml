@@ -33,6 +33,7 @@ jobs:
           node --check fine-sieve.js
           node --check dvalue-spline.js
           node --check particle-density.js
+          node --check pycnometer-master.js
       - name: Prepare Pages bundle
         run: |
           python - <<'PY'
@@ -46,6 +47,7 @@ jobs:
           fine = '  <script src="fine-sieve.js"></script>'
           spline = '  <script src="dvalue-spline.js"></script>'
           pd = '  <script src="particle-density.js"></script>'
+          pyc = '  <script src="pycnometer-master.js"></script>'
           if hydro not in s:
               s = s.replace(sed, sed + '\n' + hydro)
           if sedfix not in s:
@@ -58,6 +60,8 @@ jobs:
               s = s.replace(fine, fine + '\n' + spline)
           if pd not in s:
               s = s.replace(spline, spline + '\n' + pd)
+          if pyc not in s:
+              s = s.replace(pd, pd + '\n' + pyc)
           p.write_text(s, encoding='utf-8')
           PY
       - name: Setup Pages
