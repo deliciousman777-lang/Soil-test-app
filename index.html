@@ -10,6 +10,33 @@
   <title>土質試験データシート</title>
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="stylesheet" href="styles.css" />
+  <style>
+    .card-action-row{display:flex;gap:8px;align-items:center;white-space:nowrap}
+    .review-btn{border:0;background:var(--accent);color:#fff;border-radius:10px;padding:8px 12px;font-weight:800}
+    .review-dialog-inner{padding:20px}
+    .review-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:12px 0 18px}
+    .review-summary>div{border:1px solid var(--line);background:#f8fbfa;border-radius:14px;padding:13px;text-align:center}
+    .review-summary span{display:block;font-size:11px;color:var(--muted);margin-bottom:4px}
+    .review-summary strong{display:block;font-size:22px;color:var(--accent-dark)}
+    .review-meta{font-size:12px;color:var(--muted);margin:-8px 0 16px}
+    .review-section{margin-top:20px}
+    .review-section h3{font-size:15px;margin-bottom:9px}
+    .review-table{border-collapse:collapse;width:100%;min-width:720px;font-size:13px}
+    .review-table th,.review-table td{border-bottom:1px solid var(--line);padding:10px;text-align:right;white-space:nowrap}
+    .review-table thead th{background:#eef4f2;color:#43504d;font-size:12px}
+    .review-table th:first-child,.review-table td:first-child{text-align:left}
+    .review-table strong{color:var(--accent-dark)}
+    .review-note{padding:11px 12px;border-radius:11px;background:#eef4f2;color:#53605d;font-size:12px;margin-top:10px}
+    .review-close-row{display:flex;justify-content:flex-end;margin-top:18px;position:sticky;bottom:-20px;background:#fff;padding:12px 0 20px}
+    @media(max-width:560px){
+      .card-title-row{gap:8px}
+      .card-action-row{flex-direction:column;gap:6px}
+      .card-action-row button{width:100%;padding:7px 10px}
+      .review-summary{grid-template-columns:1fr 1fr 1fr;gap:6px}
+      .review-summary>div{padding:10px 5px}
+      .review-summary strong{font-size:18px}
+    }
+  </style>
 </head>
 <body>
   <header class="topbar">
@@ -61,9 +88,33 @@
       <div class="dialog-head"><div><p class="eyebrow">JIS A 1203</p><h2 id="moistureDialogTitle">含水比試験</h2></div><button type="button" class="icon-btn" data-close="moistureDialog">×</button></div>
       <label>試料名 / No.<input name="sample" required autocomplete="off" placeholder="例：No.1" /></label>
       <div class="specimen-list">
-        <section class="specimen-card"><div class="specimen-head"><strong>測定 1</strong><span id="moisture1">— %</span></div><label>容器番号<input name="containerNo1" autocomplete="off" placeholder="例：A-12" /></label><div class="measurement-grid"><label>容器質量 (g)<div class="voice-input"><input name="containerMass1" inputmode="decimal" required placeholder="0.00" /><button type="button" class="mic" data-voice="containerMass1" data-form="moistureForm">🎤</button></div></label><label>容器＋湿潤土 (g)<div class="voice-input"><input name="wetMass1" inputmode="decimal" required placeholder="0.00" /><button type="button" class="mic" data-voice="wetMass1" data-form="moistureForm">🎤</button></div></label><label>容器＋乾燥土 (g)<div class="voice-input"><input name="dryMass1" inputmode="decimal" required placeholder="0.00" /><button type="button" class="mic" data-voice="dryMass1" data-form="moistureForm">🎤</button></div></label></div></section>
-        <section class="specimen-card"><div class="specimen-head"><strong>測定 2</strong><span id="moisture2">— %</span></div><label>容器番号<input name="containerNo2" autocomplete="off" placeholder="例：A-13" /></label><div class="measurement-grid"><label>容器質量 (g)<div class="voice-input"><input name="containerMass2" inputmode="decimal" required placeholder="0.00" /><button type="button" class="mic" data-voice="containerMass2" data-form="moistureForm">🎤</button></div></label><label>容器＋湿潤土 (g)<div class="voice-input"><input name="wetMass2" inputmode="decimal" required placeholder="0.00" /><button type="button" class="mic" data-voice="wetMass2" data-form="moistureForm">🎤</button></div></label><label>容器＋乾燥土 (g)<div class="voice-input"><input name="dryMass2" inputmode="decimal" required placeholder="0.00" /><button type="button" class="mic" data-voice="dryMass2" data-form="moistureForm">🎤</button></div></label></div></section>
-        <section class="specimen-card"><div class="specimen-head"><strong>測定 3</strong><span id="moisture3">— %</span></div><label>容器番号<input name="containerNo3" autocomplete="off" placeholder="例：A-14" /></label><div class="measurement-grid"><label>容器質量 (g)<div class="voice-input"><input name="containerMass3" inputmode="decimal" required placeholder="0.00" /><button type="button" class="mic" data-voice="containerMass3" data-form="moistureForm">🎤</button></div></label><label>容器＋湿潤土 (g)<div class="voice-input"><input name="wetMass3" inputmode="decimal" required placeholder="0.00" /><button type="button" class="mic" data-voice="wetMass3" data-form="moistureForm">🎤</button></div></label><label>容器＋乾燥土 (g)<div class="voice-input"><input name="dryMass3" inputmode="decimal" required placeholder="0.00" /><button type="button" class="mic" data-voice="dryMass3" data-form="moistureForm">🎤</button></div></label></div></section>
+        <section class="specimen-card">
+          <div class="specimen-head"><strong>測定 1</strong><span id="moisture1">— %</span></div>
+          <label>容器番号<input name="containerNo1" autocomplete="off" placeholder="例：A-12" /></label>
+          <div class="measurement-grid">
+            <label>容器＋湿潤試料 (g)<div class="voice-input"><input name="wetMass1" inputmode="decimal" required placeholder="0.00" /><button type="button" class="mic" data-voice="wetMass1" data-form="moistureForm">🎤</button></div></label>
+            <label>容器＋乾燥試料 (g)<div class="voice-input"><input name="dryMass1" inputmode="decimal" required placeholder="0.00" /><button type="button" class="mic" data-voice="dryMass1" data-form="moistureForm">🎤</button></div></label>
+            <label>容器質量 (g)<div class="voice-input"><input name="containerMass1" inputmode="decimal" required placeholder="0.00" /><button type="button" class="mic" data-voice="containerMass1" data-form="moistureForm">🎤</button></div></label>
+          </div>
+        </section>
+        <section class="specimen-card">
+          <div class="specimen-head"><strong>測定 2</strong><span id="moisture2">— %</span></div>
+          <label>容器番号<input name="containerNo2" autocomplete="off" placeholder="例：A-13" /></label>
+          <div class="measurement-grid">
+            <label>容器＋湿潤試料 (g)<div class="voice-input"><input name="wetMass2" inputmode="decimal" required placeholder="0.00" /><button type="button" class="mic" data-voice="wetMass2" data-form="moistureForm">🎤</button></div></label>
+            <label>容器＋乾燥試料 (g)<div class="voice-input"><input name="dryMass2" inputmode="decimal" required placeholder="0.00" /><button type="button" class="mic" data-voice="dryMass2" data-form="moistureForm">🎤</button></div></label>
+            <label>容器質量 (g)<div class="voice-input"><input name="containerMass2" inputmode="decimal" required placeholder="0.00" /><button type="button" class="mic" data-voice="containerMass2" data-form="moistureForm">🎤</button></div></label>
+          </div>
+        </section>
+        <section class="specimen-card">
+          <div class="specimen-head"><strong>測定 3</strong><span id="moisture3">— %</span></div>
+          <label>容器番号<input name="containerNo3" autocomplete="off" placeholder="例：A-14" /></label>
+          <div class="measurement-grid">
+            <label>容器＋湿潤試料 (g)<div class="voice-input"><input name="wetMass3" inputmode="decimal" required placeholder="0.00" /><button type="button" class="mic" data-voice="wetMass3" data-form="moistureForm">🎤</button></div></label>
+            <label>容器＋乾燥試料 (g)<div class="voice-input"><input name="dryMass3" inputmode="decimal" required placeholder="0.00" /><button type="button" class="mic" data-voice="dryMass3" data-form="moistureForm">🎤</button></div></label>
+            <label>容器質量 (g)<div class="voice-input"><input name="containerMass3" inputmode="decimal" required placeholder="0.00" /><button type="button" class="mic" data-voice="containerMass3" data-form="moistureForm">🎤</button></div></label>
+          </div>
+        </section>
       </div>
       <div id="moisturePreview" class="result-box">平均含水比：—</div><p class="hint">3測定の含水比を自動計算し、その平均値を表示します。</p>
       <div class="dialog-actions"><button type="button" class="ghost" data-close="moistureDialog">キャンセル</button><button id="moistureSubmitBtn" class="primary" value="default">保存</button></div>
@@ -84,7 +135,7 @@
           <label>メスシリンダーNo.<input name="cylinderNo" autocomplete="off" placeholder="例：3" /></label>
           <label>沈降分析用試料の乾燥質量 ms1 (g)<div class="voice-input"><input name="sedDryMass" inputmode="decimal" placeholder="例：73.4" /><button type="button" class="mic" data-voice="sedDryMass" data-form="grainForm">🎤</button></div></label>
           <label>土粒子の密度 ρs (Mg/m³)<input name="particleDensity" inputmode="decimal" placeholder="例：2.65" /></label>
-          <label>メニスカス補正値 Cm<input name="meniscusCorrection" inputmode="decimal" placeholder="例：0.0005" /></label>
+          <label>メニスカス補正値 Cm<input name="meniscusCorrection" inputmode="decimal" value="0.0005" /></label>
           <label>懸濁液体積 V (mL)<input name="suspensionVolume" inputmode="decimal" value="1000" /></label>
           <label>基準水温 (℃)<input name="referenceTemp" inputmode="decimal" value="20" /></label>
           <label>2 mm通過質量比 (%)<input id="twoMmPassRatio" name="twoMmPassRatio" inputmode="decimal" placeholder="ふるい分析から自動" /></label>
@@ -98,7 +149,174 @@
       <div class="dialog-actions"><button type="button" class="ghost" data-close="grainDialog">キャンセル</button><button id="grainSubmitBtn" class="primary" value="default">保存</button></div>
     </form>
   </dialog>
+
+  <dialog id="testReviewDialog" class="wide-dialog">
+    <div class="review-dialog-inner">
+      <div class="dialog-head">
+        <div><p class="eyebrow">CHECK</p><h2 id="testReviewTitle">試験データ確認</h2></div>
+        <button type="button" id="closeReviewDialog" class="icon-btn">×</button>
+      </div>
+      <div id="testReviewBody"></div>
+      <div class="review-close-row"><button type="button" id="closeReviewDialogBottom" class="primary">閉じる</button></div>
+    </div>
+  </dialog>
+
   <script src="app.js"></script>
   <script src="sedimentation.js"></script>
+  <script>
+    (() => {
+      const reviewDialog = document.getElementById('testReviewDialog');
+      const reviewTitle = document.getElementById('testReviewTitle');
+      const reviewBody = document.getElementById('testReviewBody');
+
+      function addReviewButton(html, test, kind) {
+        const id = escapeHtml(test.id);
+        const editAttr = kind === 'grain' ? 'data-edit-grain' : 'data-edit-moisture';
+        const editButton = `<button type="button" class="edit-btn" ${editAttr}="${id}">訂正</button>`;
+        const actionButtons = `<div class="card-action-row"><button type="button" class="review-btn" data-view-test="${id}">確認</button>${editButton}</div>`;
+        return html.replace(editButton, actionButtons);
+      }
+
+      const baseRenderMoistureCardForReview = renderMoistureCard;
+      renderMoistureCard = function(test) {
+        return addReviewButton(baseRenderMoistureCardForReview(test), test, 'moisture');
+      };
+
+      const baseRenderGrainCardForReview = renderGrainCard;
+      renderGrainCard = function(test) {
+        return addReviewButton(baseRenderGrainCardForReview(test), test, 'grain');
+      };
+
+      function safeNumber(value, digits = 3) {
+        const n = Number(value);
+        return Number.isFinite(n) ? format(n, digits) : '—';
+      }
+
+      function dateText(value) {
+        if (!value) return '—';
+        const d = new Date(value);
+        return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString('ja-JP');
+      }
+
+      function moistureReviewHtml(test) {
+        const measurements = testMeasurements(test);
+        const rows = measurements.map((m, i) => `
+          <tr>
+            <th>測定 ${i + 1}</th>
+            <td>${escapeHtml(m.containerNo || '—')}</td>
+            <td>${safeNumber(m.wetMass)} g</td>
+            <td>${safeNumber(m.dryMass)} g</td>
+            <td>${safeNumber(m.containerMass)} g</td>
+            <td><strong>${Number(m.moisture).toFixed(1)} %</strong></td>
+          </tr>
+        `).join('');
+
+        return `
+          <p class="review-meta">試料：${escapeHtml(test.sample || '—')} ｜ 登録：${dateText(test.createdAt)}${test.updatedAt ? ` ｜ 最終訂正：${dateText(test.updatedAt)}` : ''}</p>
+          <div class="review-summary">
+            <div><span>平均含水比</span><strong>${averageForTest(test).toFixed(1)} %</strong></div>
+            <div><span>測定数</span><strong>${measurements.length}</strong></div>
+            <div><span>状態</span><strong>${test.updatedAt ? '訂正済' : '保存済'}</strong></div>
+          </div>
+          <section class="review-section">
+            <h3>測定値</h3>
+            <div class="table-wrap">
+              <table class="review-table">
+                <thead><tr><th>測定</th><th>容器番号</th><th>容器＋湿潤試料</th><th>容器＋乾燥試料</th><th>容器質量</th><th>含水比</th></tr></thead>
+                <tbody>${rows || '<tr><td colspan="6">測定値がありません</td></tr>'}</tbody>
+              </table>
+            </div>
+          </section>
+          <div class="review-note">この画面は確認専用です。数値を直す場合は「訂正」から変更します。</div>
+        `;
+      }
+
+      function grainReviewHtml(test) {
+        const f = grainFractions(test);
+        const total = Number(test.totalDryMass);
+        let cumulative = 0;
+        const sieveRows = (test.sieves || []).filter(row => row.retained != null).map(row => {
+          const retained = Number(row.retained);
+          if (Number.isFinite(retained)) cumulative += retained;
+          const passing = Number.isFinite(total) && total > 0 ? 100 - (cumulative / total) * 100 : null;
+          return `
+            <tr>
+              <th>${safeNumber(row.size)} mm</th>
+              <td>${safeNumber(retained)} g</td>
+              <td>${safeNumber(cumulative)} g</td>
+              <td>${Number.isFinite(passing) ? `${passing.toFixed(1)} %` : '—'}</td>
+            </tr>
+          `;
+        }).join('');
+
+        let sedimentationHtml = '';
+        const sed = test.sedimentation;
+        if (sed?.enabled) {
+          const s = sed.settings || {};
+          const sedRows = (sed.rows || []).map(row => `
+            <tr>
+              <th>${safeNumber(row.t, 0)} min</th>
+              <td>${escapeHtml(row.clock || '—')}</td>
+              <td>${safeNumber(row.r, 4)}</td>
+              <td>${safeNumber(row.d, 4)} mm</td>
+              <td>${safeNumber(row.P, 1)} %</td>
+              <td>${safeNumber(row.overall, 1)} %</td>
+            </tr>
+          `).join('');
+          sedimentationHtml = `
+            <section class="review-section">
+              <h3>沈降分析</h3>
+              <p class="review-meta">メスシリンダー No.${escapeHtml(s.cylinderNo || '—')} ｜ 浮ひょう No.${escapeHtml(s.hydrometerNo || '—')} ｜ 水温 ${safeNumber(s.waterTemp ?? s.referenceTemp, 1)} ℃ ｜ 土粒子密度 ${safeNumber(s.rhoS, 3)} Mg/m³</p>
+              <div class="table-wrap">
+                <table class="review-table">
+                  <thead><tr><th>時間</th><th>測定時刻</th><th>浮ひょう r</th><th>粒径 d</th><th>P</th><th>全試料換算</th></tr></thead>
+                  <tbody>${sedRows || '<tr><td colspan="6">測定値がありません</td></tr>'}</tbody>
+                </table>
+              </div>
+            </section>
+          `;
+        }
+
+        return `
+          <p class="review-meta">試料：${escapeHtml(test.sample || '—')} ｜ 登録：${dateText(test.createdAt)}${test.updatedAt ? ` ｜ 最終訂正：${dateText(test.updatedAt)}` : ''}</p>
+          <div class="review-summary">
+            <div><span>礫分</span><strong>${Number(f.gravel).toFixed(1)} %</strong></div>
+            <div><span>砂分</span><strong>${Number(f.sand).toFixed(1)} %</strong></div>
+            <div><span>細粒分</span><strong>${Number(f.fines).toFixed(1)} %</strong></div>
+          </div>
+          <p class="review-meta">全試料の乾燥質量：${safeNumber(test.totalDryMass)} g</p>
+          <section class="review-section">
+            <h3>ふるい分析</h3>
+            <div class="table-wrap">
+              <table class="review-table">
+                <thead><tr><th>ふるい径</th><th>残留質量</th><th>加積残留</th><th>通過率</th></tr></thead>
+                <tbody>${sieveRows || '<tr><td colspan="4">測定値がありません</td></tr>'}</tbody>
+              </table>
+            </div>
+          </section>
+          ${sedimentationHtml}
+          <div class="review-note">この画面は確認専用です。数値を直す場合は「訂正」から変更します。</div>
+        `;
+      }
+
+      function openReview(testId) {
+        const p = currentProject();
+        const test = p?.tests.find(t => t.id === testId);
+        if (!test) return;
+        reviewTitle.textContent = test.type === 'grain' ? '粒度試験・詳細確認' : '含水比試験・詳細確認';
+        reviewBody.innerHTML = test.type === 'grain' ? grainReviewHtml(test) : moistureReviewHtml(test);
+        reviewDialog.showModal();
+      }
+
+      document.addEventListener('click', event => {
+        const button = event.target.closest('[data-view-test]');
+        if (!button) return;
+        openReview(button.dataset.viewTest);
+      });
+
+      document.getElementById('closeReviewDialog').addEventListener('click', () => reviewDialog.close());
+      document.getElementById('closeReviewDialogBottom').addEventListener('click', () => reviewDialog.close());
+    })();
+  </script>
 </body>
 </html>
