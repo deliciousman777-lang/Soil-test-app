@@ -41,6 +41,7 @@ jobs:
           node --check report-extra-tests.js
           node --check sample-manager.js
           node --check atterberg-np.js
+          node --check review-all-tests.js
       - name: Prepare Pages bundle
         run: |
           python - <<'PY'
@@ -62,6 +63,7 @@ jobs:
           reportextra = '  <script src="report-extra-tests.js"></script>'
           samplemgr = '  <script src="sample-manager.js"></script>'
           attnp = '  <script src="atterberg-np.js"></script>'
+          review = '  <script src="review-all-tests.js"></script>'
           if hydro not in s:
               s = s.replace(sed, sed + '\n' + hydro)
           if sedfix not in s:
@@ -90,6 +92,8 @@ jobs:
               s = s.replace(reportextra, reportextra + '\n' + samplemgr)
           if attnp not in s:
               s = s.replace(samplemgr, samplemgr + '\n' + attnp)
+          if review not in s:
+              s = s.replace(attnp, attnp + '\n' + review)
 
           s = s.replace('<meta name="theme-color" content="#f4f7f6" />', '<meta name="theme-color" content="#0b5136" />')
           s = s.replace('<meta name="apple-mobile-web-app-title" content="土質試験" />', '<meta name="apple-mobile-web-app-title" content="SoilNote" />')
