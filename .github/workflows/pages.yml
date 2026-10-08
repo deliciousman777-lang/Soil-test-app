@@ -37,6 +37,7 @@ jobs:
           node --check report-sheet.js
           node --check report-ternary-fix.js
           node --check atterberg-limits.js
+          node --check cone-index.js
       - name: Prepare Pages bundle
         run: |
           python - <<'PY'
@@ -54,6 +55,7 @@ jobs:
           report = '  <script src="report-sheet.js"></script>'
           reporttern = '  <script src="report-ternary-fix.js"></script>'
           att = '  <script src="atterberg-limits.js"></script>'
+          cone = '  <script src="cone-index.js"></script>'
           if hydro not in s:
               s = s.replace(sed, sed + '\n' + hydro)
           if sedfix not in s:
@@ -74,6 +76,8 @@ jobs:
               s = s.replace(report, report + '\n' + reporttern)
           if att not in s:
               s = s.replace(reporttern, reporttern + '\n' + att)
+          if cone not in s:
+              s = s.replace(att, att + '\n' + cone)
 
           s = s.replace('<meta name="theme-color" content="#f4f7f6" />', '<meta name="theme-color" content="#0b5136" />')
           s = s.replace('<meta name="apple-mobile-web-app-title" content="土質試験" />', '<meta name="apple-mobile-web-app-title" content="SoilNote" />')
