@@ -39,6 +39,7 @@ jobs:
           node --check atterberg-limits.js
           node --check cone-index.js
           node --check report-extra-tests.js
+          node --check sample-manager.js
       - name: Prepare Pages bundle
         run: |
           python - <<'PY'
@@ -58,6 +59,7 @@ jobs:
           att = '  <script src="atterberg-limits.js"></script>'
           cone = '  <script src="cone-index.js"></script>'
           reportextra = '  <script src="report-extra-tests.js"></script>'
+          samplemgr = '  <script src="sample-manager.js"></script>'
           if hydro not in s:
               s = s.replace(sed, sed + '\n' + hydro)
           if sedfix not in s:
@@ -82,6 +84,8 @@ jobs:
               s = s.replace(att, att + '\n' + cone)
           if reportextra not in s:
               s = s.replace(cone, cone + '\n' + reportextra)
+          if samplemgr not in s:
+              s = s.replace(reportextra, reportextra + '\n' + samplemgr)
 
           s = s.replace('<meta name="theme-color" content="#f4f7f6" />', '<meta name="theme-color" content="#0b5136" />')
           s = s.replace('<meta name="apple-mobile-web-app-title" content="土質試験" />', '<meta name="apple-mobile-web-app-title" content="SoilNote" />')
