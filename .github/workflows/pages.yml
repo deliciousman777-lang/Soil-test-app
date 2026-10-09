@@ -44,6 +44,7 @@ jobs:
           node --check review-all-tests.js
           node --check draft-save.js
           node --check grain-wash-containers.js
+          node --check test-date.js
       - name: Prepare Pages bundle
         run: |
           python - <<'PY'
@@ -68,6 +69,7 @@ jobs:
           review = '  <script src="review-all-tests.js"></script>'
           draft = '  <script src="draft-save.js"></script>'
           grainwash = '  <script src="grain-wash-containers.js"></script>'
+          testdate = '  <script src="test-date.js"></script>'
           if hydro not in s:
               s = s.replace(sed, sed + '\n' + hydro)
           if sedfix not in s:
@@ -102,6 +104,8 @@ jobs:
               s = s.replace(review, review + '\n' + draft)
           if grainwash not in s:
               s = s.replace(draft, draft + '\n' + grainwash)
+          if testdate not in s:
+              s = s.replace(grainwash, grainwash + '\n' + testdate)
 
           s = s.replace('<meta name="theme-color" content="#f4f7f6" />', '<meta name="theme-color" content="#0b5136" />')
           s = s.replace('<meta name="apple-mobile-web-app-title" content="土質試験" />', '<meta name="apple-mobile-web-app-title" content="SoilNote" />')
