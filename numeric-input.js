@@ -1,7 +1,7 @@
 // 全試験共通：数値欄は数字キーボード＋数値以外を除外
 (function(){
   const INTEGER_NAMES=[
-    /^containerNo\d+$/,
+    /container.*no/i,
     /^pycNo_\d+$/,
     /^waterNo\d+$/,
     /^cylinderNo$/,
@@ -44,12 +44,11 @@
   }
 
   function sanitizeMultiInteger(value){
-    let s=toHalfWidth(value)
+    return toHalfWidth(value)
       .replace(/[\/／・\s]+/g,',')
       .replace(/[^0-9,]/g,'')
       .replace(/,+/g,',')
       .replace(/^,|,$/g,'');
-    return s;
   }
 
   function modeFor(input){
@@ -79,7 +78,7 @@
       input.pattern='[-0-9.]*';
     }else{
       input.inputMode='numeric';
-      input.pattern='[0-9,]*';
+      input.pattern=mode==='multi'?'[0-9,]*':'[0-9]*';
     }
   }
 
