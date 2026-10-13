@@ -138,11 +138,13 @@
   }
 
   function top(p,sample,meta,page){
+    const cardNo=String(p?.constructionCardNo||'').trim().toUpperCase();
+    const pageInfo=cardNo?`施工カード No. ${esc(cardNo)}　　${page} / 2`:`${page} / 2`;
     return `<div class="r-head">
       <div class="r-field"><b>件名</b><span>${esc(p.name||'')}</span></div><div class="r-field"><b>試料名</b><span>${esc(sample)}</span></div>
       <div class="r-field"><b>試験項目</b><input data-report-meta="item" value="${esc(meta.item||'室内土質試験')}"></div><div class="r-field"><b>深さ</b><input data-report-meta="depth" value="${esc(meta.depth||'')}"></div>
       <div class="r-field"><b>試験日</b><input type="date" data-report-meta="testDate" value="${esc(meta.testDate||'')}"></div><div class="r-field"><b>試験者</b><input data-report-meta="tester" value="${esc(meta.tester||'')}"></div>
-    </div><div class="r-small" style="text-align:right">${page} / 2</div>`;
+    </div><div class="r-small" style="text-align:right;font-weight:${cardNo?'700':'400'}">${pageInfo}</div>`;
   }
 
   function page1(p,sample,meta,moisture,pd,grain){
