@@ -32,8 +32,9 @@
   function calculate(){
     const f=formEl();
     const waters=[moisture(1),moisture(2)];
-    const watersValid=waters.every(x=>x.valid);
-    const averageW=watersValid?(waters[0].w+waters[1].w)/2:null;
+    const watersValid=waters[0].valid&&(!waters[1].entered||waters[1].valid);
+    const validWaters=waters.filter(x=>x.valid);
+    const averageW=watersValid&&validWaters.length?validWaters.reduce((s,x)=>s+x.w,0)/validWaters.length:null;
 
     const moldNo=f.elements.moldNo.value.trim();
     const moldMass=num(f.elements.moldMass.value);
@@ -77,9 +78,9 @@
       <label>試料名 / No.<input name="sample" required autocomplete="off" placeholder="例：現場発生土"></label>
 
       <section class="cone-panel">
-        <div class="subsection-head"><div><span class="step-badge">1</span><strong>含水比（2測定）</strong></div><p>ma：容器＋湿潤土、mb：容器＋乾燥土、mc：容器</p></div>
+        <div class="subsection-head"><div><span class="step-badge">1</span><strong>含水比（測定1必須・測定2任意）</strong></div><p>ma：容器＋湿潤土、mb：容器＋乾燥土、mc：容器</p></div>
         <div class="cone-water-grid">
-          ${[1,2].map(i=>`<div class="cone-water-card"><div class="specimen-head"><strong>測定 ${i}</strong><span id="coneW${i}">— %</span></div><label>容器 No.<input name="waterNo${i}" autocomplete="off"></label><div class="measurement-grid"><label>ma (g)${voice(`ma${i}`)}</label><label>mb (g)${voice(`mb${i}`)}</label><label>mc (g)${voice(`mc${i}`)}</label></div></div>`).join('')}
+          ${[1,2].map(i=>`<div class="cone-water-card"><div class="specimen-head"><strong>測定 ${i}${i===1?'（必須）':'（任意）'}</strong><span id="coneW${i}">— %</span></div><label>容器 No.<input name="waterNo${i}" autocomplete="off"></label><div class="measurement-grid"><label>ma (g)${voice(`ma${i}`)}</label><label>mb (g)${voice(`mb${i}`)}</label><label>mc (g)${voice(`mc${i}`)}</label></div></div>`).join('')}
         </div>
         <div class="cone-inline-result"><span>平均含水比 w</span><strong id="coneAverageW">— %</strong></div>
       </section>
@@ -146,7 +147,7 @@
     if(a.penetrations.some(p=>p.over)){
       check.textContent=`⚠ 荷重計No.${a.loadCellNo}の容量 ${a.loadCell.capacity} N を超える値があります。荷重計または読み値を確認してください。`;check.classList.add('error');
     }else if(!a.watersValid||!a.densityValid||!a.penValid){
-      check.textContent='含水比2測定・モールド質量・5/7.5/10cmの読みをすべて入力してください。';
+      check.textContent='含水比は測定1を入力してください。測定2は任意です。モールド質量・5/7.5/10cmの読みも確認してください。';
     }else{
       check.textContent=`No.${a.loadCellNo} ｜ K=${a.loadCell.calibration.toFixed(a.loadCellNo==='1'?3:2)} N/目盛 ｜ A=${CONE_AREA} cm² ｜ V=${MOLD_VOLUME} cm³`;
     }
@@ -169,12 +170,12 @@
 
   function saveTest(e){
     e.preventDefault();const f=formEl(),sample=f.elements.sample.value.trim();if(!sample)return;const a=calculate();
-    if(!a.watersValid){alert('含水比2測定の ma・mb・mc を確認してください。ma ≥ mb > mc で入力してください。');return;}
+    if(!a.watersValid){alert('含水比は測定1の ma・mb・mc を入力してください。測定2は任意です。測定2を入力する場合も ma ≥ mb > mc で入力してください。');return;}
     if(!a.densityValid){alert('モールド質量と土＋モールド質量を確認してください。');return;}
     if(!a.penValid){alert('5 cm・7.5 cm・10 cm の荷重計の読みをすべて入力してください。');return;}
     if(a.penetrations.some(p=>p.over)){alert(`荷重計No.${a.loadCellNo}の容量 ${a.loadCell.capacity} N を超えています。`);return;}
     const p=currentProject();if(!p)return;const now=new Date().toISOString();
-    const payload={sample,moldNo:a.moldNo,moldMass:a.moldMass,moldSoilMass:a.moldSoilMass,moldVolume:MOLD_VOLUME,coneArea:CONE_AREA,moistureMeasurements:a.waters.map(x=>({containerNo:x.containerNo,ma:x.ma,mb:x.mb,mc:x.mc,w:x.w})),moistureAverage:a.averageW,wetDensity:a.wetDensity,dryDensity:a.dryDensity,loadCellNo:a.loadCellNo,loadCellCapacity:a.loadCell.capacity,calibrationFactor:a.loadCell.calibration,penetrations:a.penetrations.map(x=>({depth:x.label==='7.5 cm'?7.5:parseFloat(x.label),reading:x.reading,force:x.force})),averagePenetrationForce:a.averageQc,coneIndex:a.coneIndex};
+    const payload={sample,moldNo:a.moldNo,moldMass:a.moldMass,moldSoilMass:a.moldSoilMass,moldVolume:MOLD_VOLUME,coneArea:CONE_AREA,moistureMeasurements:a.waters.filter(x=>x.valid).map(x=>({containerNo:x.containerNo,ma:x.ma,mb:x.mb,mc:x.mc,w:x.w})),moistureAverage:a.averageW,wetDensity:a.wetDensity,dryDensity:a.dryDensity,loadCellNo:a.loadCellNo,loadCellCapacity:a.loadCell.capacity,calibrationFactor:a.loadCell.calibration,penetrations:a.penetrations.map(x=>({depth:x.label==='7.5 cm'?7.5:parseFloat(x.label),reading:x.reading,force:x.force})),averagePenetrationForce:a.averageQc,coneIndex:a.coneIndex};
     if(state.editingTestId){const t=p.tests.find(x=>x.id===state.editingTestId&&x.type===TYPE);if(!t)return;Object.assign(t,payload,{updatedAt:now});}
     else p.tests.push({id:uid(),type:TYPE,...payload,createdAt:now});
     p.updatedAt=now;saveData();dialogEl().close();resetForm();renderTests();
