@@ -6,7 +6,6 @@
   const finite=v=>Number.isFinite(Number(v));
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
   const f=(v,d=1)=>finite(v)?Number(v).toFixed(d):'';
-  const dateValue=v=>{try{return v?new Date(v).toISOString().slice(0,10):''}catch{return''}};
 
   function latest(tests,type,sample){
     return [...tests].filter(t=>t.type===type&&String(t.sample||'')===String(sample||''))
@@ -19,18 +18,12 @@
 
   function moistureRows(test){
     const arr=Array.isArray(test?.measurements)?test.measurements:[];
-    return [0,1,2].map(i=>{
-      const m=arr[i]||{};
-      return {no:m.containerNo||'',ma:m.wetMass,mb:m.dryMass,mc:m.containerMass,w:m.moisture};
-    });
+    return [0,1,2].map(i=>{const m=arr[i]||{};return {no:m.containerNo||'',ma:m.wetMass,mb:m.dryMass,mc:m.containerMass,w:m.moisture};});
   }
 
   function pdRows(test){
     const arr=Array.isArray(test?.measurements)?test.measurements:[];
-    return [0,1,2].map(i=>{
-      const r=arr[i]||{};
-      return {no:r.pycnometerNo||'',mb:r.mb1,t:r.t1,ms:r.ms,rho:r.rhoS};
-    });
+    return [0,1,2].map(i=>{const r=arr[i]||{};return {no:r.pycnometerNo||'',mb:r.mb1,t:r.t1,ms:r.ms,rho:r.rhoS};});
   }
 
   function sieveMap(test){
@@ -93,7 +86,7 @@
     document.body.appendChild(d);
     d.querySelector('#reportCloseBtn').addEventListener('click',()=>d.close());
     d.querySelector('#reportSampleSelect').addEventListener('change',renderReport);
-    d.querySelector('#reportPrintBtn').addEventListener('click',()=>{saveMeta();window.print();});
+    d.querySelector('#reportPrintBtn').addEventListener('click',printReport);
     d.addEventListener('input',e=>{if(e.target.matches('[data-report-meta]'))saveMeta();});
     addStyles();
   }
@@ -106,8 +99,16 @@
       .report-pages{padding:18px;display:grid;gap:18px;justify-content:center}.report-page{width:210mm;min-height:297mm;background:#fff;padding:10mm 11mm;box-sizing:border-box;color:#111;font-family:-apple-system,BlinkMacSystemFont,"Yu Gothic","Meiryo",sans-serif;font-size:10.5px;box-shadow:0 2px 14px rgba(0,0,0,.12)}
       .r-head{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px}.r-field{display:flex;align-items:center;border-bottom:1px solid #333;min-height:27px}.r-field b{min-width:72px;font-weight:600}.r-field input{flex:1;border:0!important;border-radius:0!important;padding:2px 4px!important;min-height:24px!important;background:transparent!important;color:#111!important;font-size:11px!important}
       .r-section{margin-top:9px}.r-section-title{font-weight:700;font-size:12px;margin:0 0 3px}.r-table{width:100%;border-collapse:collapse;table-layout:fixed}.r-table th,.r-table td{border:1px solid #333;padding:3px 4px;text-align:center;vertical-align:middle;height:23px}.r-table th{font-weight:600;background:#fafafa}.r-left{text-align:left!important}.r-total{font-weight:700}.r-small{font-size:9px;color:#333}.r-grain-grid{display:grid;grid-template-columns:1.15fr .85fr;gap:8px}.r-note{margin-top:3px;font-size:8.5px}.r-metric-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin:7px 0}.r-metric{border:1px solid #444;padding:6px;text-align:center}.r-metric span{display:block;font-size:9px}.r-metric strong{font-size:14px}.r-chart-grid{display:grid;grid-template-columns:1.15fr .85fr;gap:8px}.r-chart{border:1px solid #444;padding:5px}.r-chart svg{width:100%;height:auto;display:block}.r-frac{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin:7px 0}.r-frac div{border:1px solid #444;padding:7px;text-align:center}.r-frac strong{display:block;font-size:16px}.r-class{border:1px solid #444;padding:7px;text-align:center;font-weight:700;margin-top:5px}
+      #soilnotePrintRoot{display:none}
       @media(max-width:900px){.report-page{width:100%;min-height:auto;padding:14px}.r-chart-grid,.r-grain-grid{grid-template-columns:1fr}.report-pages{padding:8px}.report-dialog{height:98vh}}
-      @media print{@page{size:A4 portrait;margin:0}.topbar,main,.report-ui{display:none!important}body{background:#fff!important}.report-dialog{position:static!important;display:block!important;width:auto!important;height:auto!important;max-height:none!important;margin:0!important;padding:0!important;border:0!important;background:#fff!important}.report-dialog::backdrop{display:none}.report-pages{display:block!important;padding:0!important}.report-page{width:210mm!important;min-height:297mm!important;box-shadow:none!important;margin:0!important;page-break-after:always;break-after:page}.report-page:last-child{page-break-after:auto;break-after:auto}}
+      @media print{
+        @page{size:A4 portrait;margin:0}
+        body.soilnote-printing> *{display:none!important}
+        body.soilnote-printing>#soilnotePrintRoot{display:block!important}
+        #soilnotePrintRoot{padding:0!important;margin:0!important;background:#fff!important}
+        #soilnotePrintRoot .report-page{display:block!important;width:210mm!important;min-height:297mm!important;padding:10mm 11mm!important;box-shadow:none!important;margin:0!important;page-break-after:always;break-after:page}
+        #soilnotePrintRoot .report-page:last-child{page-break-after:auto;break-after:auto}
+      }
     `; document.head.appendChild(s);
   }
 
@@ -123,11 +124,33 @@
     p.reportMeta[sample]=p.reportMeta[sample]||{depth:'',tester:'',testDate:'',item:'室内土質試験'};
     return p.reportMeta[sample];
   }
+
   function saveMeta(){
     const p=currentProject(); const sample=document.getElementById('reportSampleSelect')?.value; if(!p||!sample)return;
     const m=metaFor(p,sample);
     document.querySelectorAll('#reportPages [data-report-meta]').forEach(el=>m[el.dataset.reportMeta]=el.value);
     saveData();
+  }
+
+  function cleanupPrintRoot(){
+    document.body.classList.remove('soilnote-printing');
+    document.getElementById('soilnotePrintRoot')?.remove();
+  }
+
+  function printReport(){
+    saveMeta();
+    renderReport();
+    const pages=document.getElementById('reportPages');
+    if(!pages)return;
+    cleanupPrintRoot();
+    const root=document.createElement('div');
+    root.id='soilnotePrintRoot';
+    root.className='report-pages';
+    root.innerHTML=pages.innerHTML;
+    document.body.appendChild(root);
+    document.body.classList.add('soilnote-printing');
+    window.addEventListener('afterprint',cleanupPrintRoot,{once:true});
+    window.print();
   }
 
   function renderReport(){
@@ -155,9 +178,7 @@
     const sedRows=sed?.rows||[], cylinder=sed?.settings?.cylinderNo||'';
     return `<section class="report-page" id="reportPage1">${top(p,sample,meta,1)}
       <div class="r-section"><div class="r-section-title">土粒子の密度</div><table class="r-table"><tr><th>ピクノメーター No.</th>${prs.map(r=>`<td>${esc(r.no)}</td>`).join('')}</tr><tr><th>(試料+蒸留水+ピクノメーター) m<sub>b</sub> (g)</th>${prs.map(r=>`<td>${f(r.mb,3)}</td>`).join('')}</tr><tr><th>m<sub>b</sub>測定時の温度 T (℃)</th>${prs.map(r=>`<td>${f(r.t,1)}</td>`).join('')}</tr><tr><th>試料の炉乾燥質量 m<sub>s</sub> (g)</th>${prs.map(r=>`<td>${f(r.ms,3)}</td>`).join('')}</tr><tr><th>土粒子の密度 ρ<sub>s</sub> (Mg/m³)</th>${prs.map(r=>`<td>${f(r.rho,3)}</td>`).join('')}</tr><tr class="r-total"><th>平均値</th><td colspan="3">${avgPd!=null?avgPd.toFixed(3):''}</td></tr></table></div>
-
       <div class="r-section"><div class="r-section-title">含水比試験</div><table class="r-table"><tr><th>No.</th>${mrs.map(r=>`<td>${esc(r.no)}</td>`).join('')}</tr><tr><th>m<sub>a</sub> 容器＋湿潤土 (g)</th>${mrs.map(r=>`<td>${f(r.ma,1)}</td>`).join('')}</tr><tr><th>m<sub>b</sub> 容器＋乾燥土 (g)</th>${mrs.map(r=>`<td>${f(r.mb,1)}</td>`).join('')}</tr><tr><th>m<sub>c</sub> 容器質量 (g)</th>${mrs.map(r=>`<td>${f(r.mc,1)}</td>`).join('')}</tr><tr><th>w (%)</th>${mrs.map(r=>`<td>${f(r.w,1)}</td>`).join('')}</tr><tr class="r-total"><th>平均含水比</th><td colspan="3">${avgW!=null?avgW.toFixed(1)+' %':''}</td></tr></table></div>
-
       <div class="r-section"><div class="r-section-title">粒度試験</div><table class="r-table"><tr><th class="r-left">全試料の炉乾燥質量</th><td>${f(grain?.totalDryMass,1)} g</td><th class="r-left">2 mmふるい通過試料</th><td>${sed?.enabled?'沈降あり':'沈降なし'}</td></tr><tr><th class="r-left">2 mm通過分の炉乾燥質量 / 沈降用質量</th><td>${f(grain?.fineDryMass,1)} g</td><th class="r-left">メスシリンダーNo.</th><td>${esc(cylinder)}</td></tr></table>
       <div class="r-grain-grid" style="margin-top:6px"><div><table class="r-table"><tr><th colspan="4">沈降分析</th></tr><tr><th>測定時刻</th><th>経過時間(min)</th><th>浮ひょう</th><th>温度(℃)</th></tr>${[1,2,5,15,30,60,240,1440].map((t,i)=>{const r=sedRows[i]||{};return`<tr><td>${esc(r.clock||'')}</td><td>${t}</td><td>${r.r!=null?String(r.r):''}</td><td>${f(r.temp??sed?.settings?.waterTemp,1)}</td></tr>`}).join('')}</table></div>
       <div><table class="r-table"><tr><th colspan="2">ふるい分析（2 mm残留分）</th><th colspan="2">ふるい分析（2 mm通過分）</th></tr><tr><th>ふるい(mm)</th><th>残留(g)</th><th>ふるい(mm)</th><th>残留(g)</th></tr>${Array.from({length:8},(_,i)=>{const a=coarse[i],b=fine[i];return`<tr><td>${a??''}</td><td>${a!=null?f(sm.get(a),1):''}</td><td>${b??''}</td><td>${b!=null?f(sm.get(b),2):''}</td></tr>`}).join('')}</table></div></div></div>
@@ -165,6 +186,7 @@
   }
 
   function fmtD(v){if(!finite(v)||Number(v)<=0)return'';const n=Number(v);return n>=1?n.toFixed(3):n.toPrecision(3);}
+
   function page2(p,sample,meta,grain){
     const fr=grain?.fractions||null, pts=grainPoints(grain), m=metrics(pts), cl=classify(fr);
     return `<section class="report-page" id="reportPage2">${top(p,sample,meta,2)}<div class="r-section"><div class="r-section-title">粒度試験結果</div>
@@ -175,6 +197,7 @@
   }
 
   function se(name,attrs={},text=''){const e=document.createElementNS(SVG,name);Object.entries(attrs).forEach(([k,v])=>e.setAttribute(k,String(v)));if(text)e.textContent=text;return e;}
+
   function drawReportCurve(grain){
     const svg=document.getElementById('reportCurveSvg');if(!svg)return;svg.innerHTML='';const pts=grainPoints(grain);const W=720,H=390,L=62,R=18,T=22,B=50,pw=W-L-R,ph=H-T-B,x=d=>L+(Math.log10(d)+3)/5*pw,y=p=>T+(100-p)/100*ph;
     svg.appendChild(se('rect',{x:L,y:T,width:pw,height:ph,fill:'#fff',stroke:'#555'}));
