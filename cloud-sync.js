@@ -16,6 +16,8 @@
   let channel = null;
   let syncing = false;
   let saveTimer = null;
+  let realtimeTimer = null;
+  let suppressRealtimeUntil = 0;
   let originalSaveData = null;
 
   function esc(v){
@@ -182,7 +184,7 @@
 
   async function syncNow(showMessage=false){
     if(!client||!session||!workspace||syncing)return;
-    syncing=true;setTopStatus('syncing','同期中…');if(showMessage)message('同期中…');
+    syncing=true;clearTimeout(realtimeTimer);realtimeTimer=null;setTopStatus('syncing','同期中…');if(showMessage)message('同期中…');
     try{
       const {data:rows,error}=await client.from('projects').select('project_id,payload,updated_at,updated_by,deleted_at').eq('workspace_id',workspace.id);if(error)throw error;
       const local=localProjects();const localMap=new Map(local.map(p=>[String(p.id),p]));const cloudMap=new Map((rows||[]).map(r=>[String(r.project_id),r]));let localChanged=false;const uploads=[];
@@ -206,7 +208,9 @@
       if(uploads.length){
         const unique=[...new Map(uploads.map(p=>[String(p.id),p])).values()];
         const payload=unique.map(p=>({workspace_id:workspace.id,project_id:String(p.id),payload:p,updated_at:p.updatedAt||p.createdAt||new Date().toISOString(),updated_by:session.user.id,deleted_at:null}));
+        suppressRealtimeUntil=Date.now()+2500;
         const {error:upError}=await client.from('projects').upsert(payload,{onConflict:'workspace_id,project_id'});if(upError)throw upError;
+        suppressRealtimeUntil=Math.max(suppressRealtimeUntil,Date.now()+1500);
       }
 
       setTopStatus('online',`共有：${workspace.name}`);if(showMessage)message(`同期完了（工事 ${local.length}件）`,'ok');
@@ -218,15 +222,24 @@
 
   async function deleteCloudProject(projectId){
     if(!client||!session||!workspace||!projectId)return;const now=new Date().toISOString();
+    suppressRealtimeUntil=Date.now()+2500;
     const {error}=await client.from('projects').update({deleted_at:now,updated_at:now,updated_by:session.user.id}).eq('workspace_id',workspace.id).eq('project_id',String(projectId));if(error)console.error('[SoilNote Cloud] delete',error);
+    suppressRealtimeUntil=Math.max(suppressRealtimeUntil,Date.now()+1500);
   }
 
   function startRealtime(){
     stopRealtime();if(!workspace||!client)return;
-    channel=client.channel(`soilnote-${workspace.id}`).on('postgres_changes',{event:'*',schema:'public',table:'projects',filter:`workspace_id=eq.${workspace.id}`},()=>{if(!syncing)setTimeout(()=>syncNow(false),250);}).subscribe();
+    channel=client.channel(`soilnote-${workspace.id}`).on('postgres_changes',{event:'*',schema:'public',table:'projects',filter:`workspace_id=eq.${workspace.id}`},()=>{
+      if(syncing||Date.now()<suppressRealtimeUntil)return;
+      clearTimeout(realtimeTimer);
+      realtimeTimer=setTimeout(()=>{realtimeTimer=null;syncNow(false);},600);
+    }).subscribe();
   }
 
-  function stopRealtime(){if(channel&&client)client.removeChannel(channel).catch(()=>{});channel=null;}
+  function stopRealtime(){
+    if(realtimeTimer){clearTimeout(realtimeTimer);realtimeTimer=null;}
+    if(channel&&client)client.removeChannel(channel).catch(()=>{});channel=null;
+  }
 
   function installSaveHook(){
     if(typeof saveData!=='function'||originalSaveData)return;originalSaveData=saveData;saveData=function(){originalSaveData();queueSync();};
