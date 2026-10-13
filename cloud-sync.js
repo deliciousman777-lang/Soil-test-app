@@ -184,7 +184,7 @@
 
   async function syncNow(showMessage=false){
     if(!client||!session||!workspace||syncing)return;
-    syncing=true;clearTimeout(realtimeTimer);realtimeTimer=null;setTopStatus('syncing','同期中…');if(showMessage)message('同期中…');
+    syncing=true;clearTimeout(realtimeTimer);realtimeTimer=null;if(showMessage){setTopStatus('syncing','同期中…');message('同期中…');}
     try{
       const {data:rows,error}=await client.from('projects').select('project_id,payload,updated_at,updated_by,deleted_at').eq('workspace_id',workspace.id);if(error)throw error;
       const local=localProjects();const localMap=new Map(local.map(p=>[String(p.id),p]));const cloudMap=new Map((rows||[]).map(r=>[String(r.project_id),r]));let localChanged=false;const uploads=[];
