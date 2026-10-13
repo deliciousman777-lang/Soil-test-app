@@ -86,7 +86,6 @@
     style.id='soilnoteEditLockStyle';
     style.textContent=`
       .edit-locked{opacity:.78!important;cursor:not-allowed!important;background:#fff3e8!important;color:#9a3412!important;border-color:#fdba74!important}
-      .soilnote-lock-note{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:800;color:#9a3412;background:#fff7ed;border:1px solid #fed7aa;border-radius:999px;padding:4px 8px;margin-left:6px}
     `;
     document.head.appendChild(style);
   }
@@ -157,15 +156,15 @@
     if(!lock)return true;
     const result=await acquireLock(lock.projectId,lock.testId,true);
     if(result.acquired)return true;
-    activeLock=null;stopHeartbeat();
+    activeLock=null;
+    stopHeartbeat();
     if(showLoss){
       const who=result.holderName?`${result.holderName}さんが`:'別の端末が';
       window.alert(`編集権限が切り替わりました。\n${who}この試験を編集中です。\nこの画面からの保存はできません。`);
     }
     if(activeDialog?.open){
-      activeDialog.querySelectorAll('input,select,textarea,button').forEach(el=>{
-        if(!el.matches('[data-close]')&&el.type!=='button')el.disabled=true;
-      });
+      activeDialog.querySelectorAll('input,select,textarea').forEach(el=>{el.disabled=true;});
+      activeDialog.querySelectorAll('button[type="submit"],button[value="default"]').forEach(el=>{el.disabled=true;});
     }
     await refreshLocks();
     return false;
@@ -178,7 +177,6 @@
       if(!activeDialog)return;
       const d=activeDialog;
       const onClose=()=>{
-        d.removeEventListener('close',onClose);
         if(activeDialog===d)activeDialog=null;
         releaseLock();
       };
@@ -187,8 +185,7 @@
   }
 
   async function handleEditClick(e){
-    const button=e.target.closest?.('[data-edit-moisture],[data-edit-grain],[data-edit-particle-density],[data-edit-atterberg],[data-edit-cone-index],[data-edit-test]') ||
-      e.target.closest?.('button');
+    const button=e.target.closest?.('button');
     if(!button)return;
     const target=targetFromButton(button);
     if(!target?.projectId||!target?.testId)return;
@@ -256,12 +253,14 @@
         button.disabled=true;
         button.dataset.soilnoteLockDisabled='1';
         button.classList.add('edit-locked');
-        button.textContent=`${lock.display_name||'他端末'}さん編集中`;
+        const text=`${lock.display_name||'他端末'}さん編集中`;
+        if(button.textContent!==text)button.textContent=text;
       }else if(button.dataset.soilnoteLockDisabled==='1'){
         button.disabled=false;
         delete button.dataset.soilnoteLockDisabled;
         button.classList.remove('edit-locked');
-        button.textContent=button.dataset.lockOriginalText||'訂正';
+        const text=button.dataset.lockOriginalText||'訂正';
+        if(button.textContent!==text)button.textContent=text;
       }
     });
   }
@@ -287,8 +286,6 @@
         }
       });
       window.addEventListener('focus',()=>{if(activeLock)renewActiveLock(true);refreshLocks();});
-      const observer=new MutationObserver(()=>applyLockUI());
-      observer.observe(document.body,{subtree:true,childList:true});
       startRefresh();
       await refreshLocks();
     }catch(err){console.error('[SoilNote Lock] boot',err);}
