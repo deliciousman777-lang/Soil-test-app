@@ -45,6 +45,10 @@ function escapeHtml(value = '') {
   return String(value).replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#039;','"':'&quot;'}[ch]));
 }
 
+function normalizeConstructionCardNo(value = '') {
+  return String(value).trim().toUpperCase().replace(/\s+/g, '');
+}
+
 function format(n, digits = 3) {
   return Number(n).toLocaleString('ja-JP', { maximumFractionDigits: digits });
 }
@@ -60,10 +64,12 @@ function renderProjects() {
 
   projects.forEach(project => {
     const btn = document.createElement('button');
+    const cardNo = normalizeConstructionCardNo(project.constructionCardNo || '');
     btn.className = 'card card-button';
     btn.innerHTML = `
       <h3>${escapeHtml(project.name)}</h3>
       <p>${escapeHtml(project.location || '場所未入力')}</p>
+      ${cardNo ? `<p>施工カード No. ${escapeHtml(cardNo)}</p>` : ''}
       <div class="meta"><span>試験 ${project.tests.length}件</span><span>${new Date(project.updatedAt).toLocaleDateString('ja-JP')}</span></div>
     `;
     btn.addEventListener('click', () => openProject(project.id));
@@ -80,7 +86,8 @@ function openProject(id) {
   const p = currentProject();
   if (!p) return;
   document.getElementById('projectTitle').textContent = p.name;
-  document.getElementById('projectMeta').textContent = [p.location, p.client].filter(Boolean).join(' ｜ ') || '詳細未入力';
+  const cardNo = normalizeConstructionCardNo(p.constructionCardNo || '');
+  document.getElementById('projectMeta').textContent = [p.location, cardNo ? `施工カード No. ${cardNo}` : '', p.client].filter(Boolean).join(' ｜ ') || '詳細未入力';
   projectView.classList.add('hidden');
   detailView.classList.remove('hidden');
   renderTests();
@@ -400,6 +407,90 @@ function openEditGrain(testId) {
   grainDialog.showModal();
 }
 
+function setupConstructionCardUi() {
+  if (!projectForm.elements.constructionCardNo) {
+    const locationInput = projectForm.elements.location;
+    const locationLabel = locationInput?.closest('label');
+    const label = document.createElement('label');
+    label.innerHTML = '施工カードNo.<input name="constructionCardNo" autocomplete="off" autocapitalize="characters" placeholder="例：R08-011" />';
+    if (locationLabel) locationLabel.insertAdjacentElement('afterend', label);
+  }
+
+  if (!document.getElementById('editProjectInfoBtn')) {
+    const deleteBtn = document.getElementById('deleteProjectBtn');
+    if (deleteBtn?.parentElement) {
+      const editBtn = document.createElement('button');
+      editBtn.id = 'editProjectInfoBtn';
+      editBtn.type = 'button';
+      editBtn.className = 'ghost';
+      editBtn.textContent = '工事情報編集';
+      deleteBtn.parentElement.insertBefore(editBtn, deleteBtn);
+      editBtn.addEventListener('click', openEditProjectInfo);
+    }
+  }
+
+  if (!document.getElementById('projectInfoDialog')) {
+    const dialog = document.createElement('dialog');
+    dialog.id = 'projectInfoDialog';
+    dialog.innerHTML = `
+      <form id="projectInfoForm" method="dialog">
+        <div class="dialog-head"><h2>工事情報を編集</h2><button type="button" class="icon-btn" id="projectInfoClose">×</button></div>
+        <label>工事件名<input name="name" required autocomplete="off" /></label>
+        <label>場所<input name="location" autocomplete="off" /></label>
+        <label>施工カードNo.<input name="constructionCardNo" autocomplete="off" autocapitalize="characters" placeholder="例：R08-011" /></label>
+        <label>発注者 / 依頼者<input name="client" autocomplete="off" /></label>
+        <div class="dialog-actions"><button type="button" class="ghost" id="projectInfoCancel">キャンセル</button><button class="primary" value="default">保存</button></div>
+      </form>`;
+    document.body.appendChild(dialog);
+    document.getElementById('projectInfoClose').addEventListener('click', () => dialog.close());
+    document.getElementById('projectInfoCancel').addEventListener('click', () => dialog.close());
+    document.getElementById('projectInfoForm').addEventListener('submit', saveProjectInfo);
+  }
+}
+
+function openEditProjectInfo() {
+  const p = currentProject();
+  const dialog = document.getElementById('projectInfoDialog');
+  const form = document.getElementById('projectInfoForm');
+  if (!p || !dialog || !form) return;
+  form.elements.name.value = p.name || '';
+  form.elements.location.value = p.location || '';
+  form.elements.constructionCardNo.value = normalizeConstructionCardNo(p.constructionCardNo || '');
+  form.elements.client.value = p.client || '';
+  dialog.showModal();
+}
+
+function saveProjectInfo(e) {
+  e.preventDefault();
+  const p = currentProject();
+  const form = e.currentTarget;
+  if (!p || !form) return;
+  const name = form.elements.name.value.trim();
+  if (!name) return;
+  p.name = name;
+  p.location = form.elements.location.value.trim();
+  p.constructionCardNo = normalizeConstructionCardNo(form.elements.constructionCardNo.value);
+  p.client = form.elements.client.value.trim();
+  p.updatedAt = new Date().toISOString();
+  saveData();
+  document.getElementById('projectInfoDialog')?.close();
+  openProject(p.id);
+  renderProjects();
+}
+
+function migrateConstructionCardNumber() {
+  let changed = false;
+  state.data.projects.forEach(project => {
+    const compactName = String(project.name || '').replace(/\s+/g, '');
+    if (!project.constructionCardNo && compactName === '公共下水道工事（東）R8-1工区') {
+      project.constructionCardNo = 'R08-011';
+      project.updatedAt = new Date().toISOString();
+      changed = true;
+    }
+  });
+  if (changed) saveData();
+}
+
 projectForm.addEventListener('submit', e => {
   e.preventDefault();
   const fd = new FormData(projectForm);
@@ -408,6 +499,7 @@ projectForm.addEventListener('submit', e => {
     id: uid(),
     name: String(fd.get('name')).trim(),
     location: String(fd.get('location')).trim(),
+    constructionCardNo: normalizeConstructionCardNo(fd.get('constructionCardNo')),
     client: String(fd.get('client')).trim(),
     tests: [],
     createdAt: now,
@@ -590,6 +682,8 @@ if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
 }
 
+setupConstructionCardUi();
+migrateConstructionCardNumber();
 buildGrainRows();
 updateGrainPreview();
 renderProjects();
