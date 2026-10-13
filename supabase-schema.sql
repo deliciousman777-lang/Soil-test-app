@@ -8,7 +8,7 @@ revoke all on schema private from anon;
 
 do $$
 begin
-  if not exists (select 1 from pg_type where typname = 'soilnote_member_role') then
+  if not exists (select 1 from pg_type t join pg_namespace n on n.oid=t.typnamespace where n.nspname='public' and t.typname='soilnote_member_role') then
     create type public.soilnote_member_role as enum ('owner','member');
   end if;
 end $$;
@@ -20,6 +20,9 @@ create table if not exists public.workspaces (
   created_by uuid references auth.users(id) on delete set null,
   created_at timestamptz not null default now()
 );
+
+create index if not exists workspaces_created_by_idx
+  on public.workspaces(created_by) where created_by is not null;
 
 create table if not exists public.workspace_members (
   workspace_id uuid not null references public.workspaces(id) on delete cascade,
@@ -44,6 +47,8 @@ create table if not exists public.projects (
 
 create index if not exists projects_workspace_updated_idx
   on public.projects(workspace_id, updated_at desc);
+create index if not exists projects_updated_by_idx
+  on public.projects(updated_by) where updated_by is not null;
 
 alter table public.workspaces enable row level security;
 alter table public.workspace_members enable row level security;
@@ -186,10 +191,9 @@ with check (
   and updated_by = (select auth.uid())
 );
 
--- Explicit Data API grants: no anonymous data access.
+-- Explicit Data API grants: no anonymous data access and no unnecessary table privileges.
 revoke all on public.workspaces, public.workspace_members, public.projects from anon;
-revoke insert, update, delete on public.workspaces, public.workspace_members from authenticated;
-revoke delete on public.projects from authenticated;
+revoke all on public.workspaces, public.workspace_members, public.projects from authenticated;
 grant usage on schema public to authenticated;
 grant usage on schema private to authenticated;
 grant select on public.workspaces, public.workspace_members to authenticated;
@@ -206,7 +210,7 @@ grant execute on function private.join_workspace_impl(text) to authenticated;
 grant execute on function public.create_workspace(text) to authenticated;
 grant execute on function public.join_workspace(text) to authenticated;
 
--- Realtime project updates for the two-device sharing workflow.
+-- Enable realtime for shared project updates.
 do $$
 begin
   if not exists (
