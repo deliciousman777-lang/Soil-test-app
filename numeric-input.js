@@ -121,6 +121,28 @@
     if(e.target instanceof HTMLInputElement)configure(e.target);
   },true);
 
+  // 音声入力は field.value を直接書き換えるため、通常の input イベントが発生しない。
+  // マイクボタン押下後に値の変化を監視し、変化したら input/change を発火して各試験の自動計算を更新する。
+  document.addEventListener('click',e=>{
+    const btn=e.target.closest?.('[data-voice]');
+    if(!btn)return;
+    const form=document.getElementById(btn.dataset.form||'moistureForm');
+    const field=form?.elements?.[btn.dataset.voice];
+    if(!(field instanceof HTMLInputElement))return;
+    const before=field.value;
+    let checks=0;
+    const timer=setInterval(()=>{
+      checks+=1;
+      if(field.value!==before){
+        field.dispatchEvent(new Event('input',{bubbles:true}));
+        field.dispatchEvent(new Event('change',{bubbles:true}));
+        clearInterval(timer);
+      }else if(checks>=100){
+        clearInterval(timer);
+      }
+    },100);
+  },true);
+
   new MutationObserver(mutations=>{
     mutations.forEach(m=>m.addedNodes.forEach(node=>{
       if(node.nodeType!==1)return;
