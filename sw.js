@@ -1,4 +1,4 @@
-const CACHE = 'soil-test-cache-v31';
+const CACHE = 'soil-test-cache-v32';
 const ASSETS = ['./','./index.html','./styles.css','./app.js','./sedimentation.js','./hydrometer-input.js','./sedimentation-cm-fix.js','./grain-charts.js','./fine-sieve.js','./dvalue-spline.js','./particle-density.js','./pycnometer-master.js','./report-sheet.js','./report-ternary-fix.js','./atterberg-limits.js','./cone-index.js','./report-extra-tests.js','./sample-manager.js','./atterberg-np.js','./review-all-tests.js','./draft-save.js','./grain-wash-containers.js','./test-date.js','./numeric-input.js','./supabase-config.js','./cloud-sync.js','./manifest.webmanifest','./icons/apple-touch-icon.png'];
 
 const CLOUD_SCRIPTS = '<script src="./supabase-config.js"></script><script src="./cloud-sync.js"></script>';
