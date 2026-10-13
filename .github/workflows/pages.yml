@@ -23,93 +23,64 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Check JavaScript syntax
         run: |
-          node --check app.js
-          node --check sedimentation.js
-          node --check hydrometer-input.js
-          node --check sedimentation-cm-fix.js
-          node --check grain-charts.js
-          node --check fine-sieve.js
-          node --check dvalue-spline.js
-          node --check particle-density.js
-          node --check pycnometer-master.js
-          node --check report-sheet.js
-          node --check report-ternary-fix.js
-          node --check atterberg-limits.js
-          node --check cone-index.js
-          node --check report-extra-tests.js
-          node --check sample-manager.js
-          node --check atterberg-np.js
-          node --check review-all-tests.js
-          node --check draft-save.js
-          node --check grain-wash-containers.js
-          node --check test-date.js
-          node --check numeric-input.js
+          for f in app.js sedimentation.js hydrometer-input.js sedimentation-cm-fix.js grain-charts.js fine-sieve.js dvalue-spline.js particle-density.js pycnometer-master.js report-sheet.js report-ternary-fix.js atterberg-limits.js cone-index.js report-extra-tests.js sample-manager.js atterberg-np.js review-all-tests.js draft-save.js grain-wash-containers.js test-date.js numeric-input.js supabase-config.js cloud-sync.js; do
+            node --check "$f"
+          done
+
       - name: Prepare Pages bundle
         run: |
           python - <<'PY'
           from pathlib import Path
+
           p = Path('index.html')
           s = p.read_text(encoding='utf-8')
-          sed = '  <script src="sedimentation.js"></script>'
-          hydro = '  <script src="hydrometer-input.js"></script>'
-          sedfix = '  <script src="sedimentation-cm-fix.js"></script>'
-          grain = '  <script src="grain-charts.js"></script>'
-          fine = '  <script src="fine-sieve.js"></script>'
-          spline = '  <script src="dvalue-spline.js"></script>'
-          pd = '  <script src="particle-density.js"></script>'
-          pyc = '  <script src="pycnometer-master.js"></script>'
-          report = '  <script src="report-sheet.js"></script>'
-          reporttern = '  <script src="report-ternary-fix.js"></script>'
-          att = '  <script src="atterberg-limits.js"></script>'
-          cone = '  <script src="cone-index.js"></script>'
-          reportextra = '  <script src="report-extra-tests.js"></script>'
-          samplemgr = '  <script src="sample-manager.js"></script>'
-          attnp = '  <script src="atterberg-np.js"></script>'
-          review = '  <script src="review-all-tests.js"></script>'
-          draft = '  <script src="draft-save.js"></script>'
-          grainwash = '  <script src="grain-wash-containers.js"></script>'
-          testdate = '  <script src="test-date.js"></script>'
-          numeric = '  <script src="numeric-input.js"></script>'
-          if hydro not in s:
-              s = s.replace(sed, sed + '\n' + hydro)
-          if sedfix not in s:
-              s = s.replace(hydro, hydro + '\n' + sedfix)
-          if grain not in s:
-              s = s.replace(sedfix, sedfix + '\n' + grain)
-          if fine not in s:
-              s = s.replace(grain, grain + '\n' + fine)
-          if spline not in s:
-              s = s.replace(fine, fine + '\n' + spline)
-          if pd not in s:
-              s = s.replace(spline, spline + '\n' + pd)
-          if pyc not in s:
-              s = s.replace(pd, pd + '\n' + pyc)
-          if report not in s:
-              s = s.replace(pyc, pyc + '\n' + report)
-          if reporttern not in s:
-              s = s.replace(report, report + '\n' + reporttern)
-          if att not in s:
-              s = s.replace(reporttern, reporttern + '\n' + att)
-          if cone not in s:
-              s = s.replace(att, att + '\n' + cone)
-          if reportextra not in s:
-              s = s.replace(cone, cone + '\n' + reportextra)
-          if samplemgr not in s:
-              s = s.replace(reportextra, reportextra + '\n' + samplemgr)
-          if attnp not in s:
-              s = s.replace(samplemgr, samplemgr + '\n' + attnp)
-          if review not in s:
-              s = s.replace(attnp, attnp + '\n' + review)
-          if draft not in s:
-              s = s.replace(review, review + '\n' + draft)
-          if grainwash not in s:
-              s = s.replace(draft, draft + '\n' + grainwash)
-          if testdate not in s:
-              s = s.replace(grainwash, grainwash + '\n' + testdate)
-          if numeric not in s:
-              s = s.replace(testdate, testdate + '\n' + numeric)
+
+          scripts = [
+              'sedimentation.js',
+              'hydrometer-input.js',
+              'sedimentation-cm-fix.js',
+              'grain-charts.js',
+              'fine-sieve.js',
+              'dvalue-spline.js',
+              'particle-density.js',
+              'pycnometer-master.js',
+              'report-sheet.js',
+              'report-ternary-fix.js',
+              'atterberg-limits.js',
+              'cone-index.js',
+              'report-extra-tests.js',
+              'sample-manager.js',
+              'atterberg-np.js',
+              'review-all-tests.js',
+              'draft-save.js',
+              'grain-wash-containers.js',
+              'test-date.js',
+              'numeric-input.js',
+              'supabase-config.js',
+              'cloud-sync.js',
+          ]
+
+          anchor = '  <script src="sedimentation.js"></script>'
+          if anchor not in s:
+              raise SystemExit('sedimentation.js anchor not found')
+
+          chain = '\n'.join(f'  <script src="{name}"></script>' for name in scripts)
+          start = s.find(anchor)
+          end = start + len(anchor)
+          while True:
+              next_line_start = end
+              if s[next_line_start:next_line_start+1] == '\n':
+                  next_line_start += 1
+              if not s.startswith('  <script src="', next_line_start):
+                  break
+              next_end = s.find('</script>', next_line_start)
+              if next_end == -1:
+                  break
+              end = next_end + len('</script>')
+          s = s[:start] + chain + s[end:]
 
           s = s.replace('<meta name="theme-color" content="#f4f7f6" />', '<meta name="theme-color" content="#0b5136" />')
           s = s.replace('<meta name="apple-mobile-web-app-title" content="土質試験" />', '<meta name="apple-mobile-web-app-title" content="SoilNote" />')
@@ -122,22 +93,29 @@ jobs:
           s = s.replace('<h1>土質試験データシート</h1>', '<h1>SoilNote</h1>')
           p.write_text(s, encoding='utf-8')
           PY
+
           base64 -d icons/apple-touch-icon.b64 > icons/apple-touch-icon.png
           rm -f icons/apple-touch-icon.b64 icons/.keep icons/test.txt
           python - <<'PY'
           from pathlib import Path
-          p=Path('icons/apple-touch-icon.png')
+          p = Path('icons/apple-touch-icon.png')
           assert p.exists() and p.stat().st_size > 10000, 'icon decode failed'
           assert p.read_bytes()[:8] == b'\x89PNG\r\n\x1a\n', 'not a PNG'
+          html = Path('index.html').read_text(encoding='utf-8')
+          assert 'supabase-config.js' in html, 'Supabase config script missing'
+          assert 'cloud-sync.js' in html, 'Cloud sync script missing'
           PY
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
         with:
           enablement: true
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: '.'
+
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
