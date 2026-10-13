@@ -168,6 +168,33 @@
     document.getElementById('coneIndexTitle').textContent='コーン指数試験を訂正';document.getElementById('coneIndexSubmit').textContent='訂正を保存';updatePreview();dialogEl().showModal();
   }
 
+  function clearDraftState(test){
+    if(!test)return;
+    delete test.draft;
+    delete test.draftFields;
+    delete test.draftFieldLabels;
+    delete test.draftSavedAt;
+  }
+
+  function isCompletedConeTest(test){
+    if(!test||test.type!==TYPE)return false;
+    const waters=Array.isArray(test.moistureMeasurements)?test.moistureMeasurements:[];
+    const pens=Array.isArray(test.penetrations)?test.penetrations:[];
+    return num(test.coneIndex)!==null&&num(test.moistureAverage)!==null&&num(test.dryDensity)!==null&&waters.length>=1&&pens.length>=3&&pens.every(p=>num(p.reading)!==null&&num(p.force)!==null);
+  }
+
+  function repairCompletedDrafts(){
+    const p=currentProject?.();if(!p?.tests)return;
+    let changed=false;
+    p.tests.forEach(test=>{
+      if(test?.draft&&isCompletedConeTest(test)){
+        clearDraftState(test);
+        changed=true;
+      }
+    });
+    if(changed){p.updatedAt=new Date().toISOString();saveData();}
+  }
+
   function saveTest(e){
     e.preventDefault();const f=formEl(),sample=f.elements.sample.value.trim();if(!sample)return;const a=calculate();
     if(!a.watersValid){alert('含水比は測定1の ma・mb・mc を入力してください。測定2は任意です。測定2を入力する場合も ma ≥ mb > mc で入力してください。');return;}
@@ -176,8 +203,15 @@
     if(a.penetrations.some(p=>p.over)){alert(`荷重計No.${a.loadCellNo}の容量 ${a.loadCell.capacity} N を超えています。`);return;}
     const p=currentProject();if(!p)return;const now=new Date().toISOString();
     const payload={sample,moldNo:a.moldNo,moldMass:a.moldMass,moldSoilMass:a.moldSoilMass,moldVolume:MOLD_VOLUME,coneArea:CONE_AREA,moistureMeasurements:a.waters.filter(x=>x.valid).map(x=>({containerNo:x.containerNo,ma:x.ma,mb:x.mb,mc:x.mc,w:x.w})),moistureAverage:a.averageW,wetDensity:a.wetDensity,dryDensity:a.dryDensity,loadCellNo:a.loadCellNo,loadCellCapacity:a.loadCell.capacity,calibrationFactor:a.loadCell.calibration,penetrations:a.penetrations.map(x=>({depth:x.label==='7.5 cm'?7.5:parseFloat(x.label),reading:x.reading,force:x.force})),averagePenetrationForce:a.averageQc,coneIndex:a.coneIndex};
-    if(state.editingTestId){const t=p.tests.find(x=>x.id===state.editingTestId&&x.type===TYPE);if(!t)return;Object.assign(t,payload,{updatedAt:now});}
-    else p.tests.push({id:uid(),type:TYPE,...payload,createdAt:now});
+    if(state.editingTestId){
+      const t=p.tests.find(x=>x.id===state.editingTestId&&x.type===TYPE);if(!t)return;
+      Object.assign(t,payload,{updatedAt:now});
+      clearDraftState(t);
+    }else{
+      p.tests.push({id:uid(),type:TYPE,...payload,createdAt:now});
+    }
+    f.dataset.draftTestId='';
+    f.dataset.finalSubmitPending='';
     p.updatedAt=now;saveData();dialogEl().close();resetForm();renderTests();
   }
 
@@ -188,7 +222,7 @@
   const baseRenderMoistureCard=renderMoistureCard;
   renderMoistureCard=function(test){if(test?.type===TYPE)return renderCard(test);return baseRenderMoistureCard(test);};
   const baseRenderTests=renderTests;
-  renderTests=function(){baseRenderTests();document.querySelectorAll('[data-edit-cone-index]').forEach(b=>b.addEventListener('click',()=>openEdit(b.dataset.editConeIndex)));};
+  renderTests=function(){repairCompletedDrafts();baseRenderTests();document.querySelectorAll('[data-edit-cone-index]').forEach(b=>b.addEventListener('click',()=>openEdit(b.dataset.editConeIndex)));};
 
   injectUI();
 })();
