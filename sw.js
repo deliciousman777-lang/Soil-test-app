@@ -1,4 +1,4 @@
-const CACHE = 'soil-test-cache-v46';
+const CACHE = 'soil-test-cache-v47';
 const ASSETS = ['./','./index.html','./styles.css','./app.js','./sedimentation.js','./hydrometer-input.js','./sedimentation-cm-fix.js','./sedimentation-workbench.js','./sedimentation-workbench-focus-fix.js','./sedimentation-alarm.js','./sedimentation-auto-open.js','./grain-delete.js','./grain-charts.js','./fine-sieve.js','./dvalue-spline.js','./particle-density.js','./pycnometer-master.js','./report-sheet.js','./report-ternary-fix.js','./atterberg-limits.js','./cone-index.js','./report-extra-tests.js','./sample-manager.js','./atterberg-np.js','./review-all-tests.js','./draft-save.js','./grain-wash-containers.js','./test-date.js','./numeric-input.js','./supabase-config.js','./cloud-share.js','./edit-lock.js','./manifest.webmanifest','./icons/apple-touch-icon.png'];
 
 self.addEventListener('install', event => {
