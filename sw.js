@@ -1,5 +1,5 @@
-const CACHE = 'soil-test-cache-v42';
-const ASSETS = ['./','./index.html','./styles.css','./app.js','./sedimentation.js','./hydrometer-input.js','./sedimentation-cm-fix.js','./sedimentation-workbench.js','./grain-charts.js','./fine-sieve.js','./dvalue-spline.js','./particle-density.js','./pycnometer-master.js','./report-sheet.js','./report-ternary-fix.js','./atterberg-limits.js','./cone-index.js','./report-extra-tests.js','./sample-manager.js','./atterberg-np.js','./review-all-tests.js','./draft-save.js','./grain-wash-containers.js','./test-date.js','./numeric-input.js','./supabase-config.js','./cloud-share.js','./edit-lock.js','./manifest.webmanifest','./icons/apple-touch-icon.png'];
+const CACHE = 'soil-test-cache-v43';
+const ASSETS = ['./','./index.html','./styles.css','./app.js','./sedimentation.js','./hydrometer-input.js','./sedimentation-cm-fix.js','./sedimentation-workbench.js','./sedimentation-alarm.js','./grain-charts.js','./fine-sieve.js','./dvalue-spline.js','./particle-density.js','./pycnometer-master.js','./report-sheet.js','./report-ternary-fix.js','./atterberg-limits.js','./cone-index.js','./report-extra-tests.js','./sample-manager.js','./atterberg-np.js','./review-all-tests.js','./draft-save.js','./grain-wash-containers.js','./test-date.js','./numeric-input.js','./supabase-config.js','./cloud-share.js','./edit-lock.js','./manifest.webmanifest','./icons/apple-touch-icon.png'];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(ASSETS)));
@@ -36,4 +36,19 @@ self.addEventListener('fetch', event => {
       return response;
     }).catch(() => caches.match(event.request))
   );
+});
+
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  event.waitUntil((async()=>{
+    const all = await clients.matchAll({type:'window',includeUncontrolled:true});
+    if(all.length){
+      const client = all[0];
+      await client.focus();
+      if(event.notification?.data) client.postMessage({type:'soilnote-sed-alarm',...event.notification.data});
+      return;
+    }
+    const client = await clients.openWindow('./');
+    if(client && event.notification?.data) client.postMessage({type:'soilnote-sed-alarm',...event.notification.data});
+  })());
 });
