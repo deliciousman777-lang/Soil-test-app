@@ -9,7 +9,7 @@
     coneIndexForm:{type:'cone-index',dialog:'coneIndexDialog',name:'締固めた土のコーン指数試験',editAttr:'data-edit-cone-index'}
   };
 
-  const esc=v=>typeof escapeHtml==='function'?escapeHtml(v):String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+  const esc=v=>typeof escapeHtml==='function'?escapeHtml(v):String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#039;'}[c]));
 
   function project(){
     try{return currentProject?.()||null;}catch{return null;}
@@ -85,6 +85,16 @@
     clearTimeout(toast._timer);toast._timer=setTimeout(()=>{el.style.opacity='0';},1600);
   }
 
+  function clearDraftMeta(test){
+    if(!test)return false;
+    const hadDraft=Boolean(test.draft||test.draftFields||test.draftFieldLabels||test.draftSavedAt);
+    delete test.draft;
+    delete test.draftFields;
+    delete test.draftFieldLabels;
+    delete test.draftSavedAt;
+    return hadDraft;
+  }
+
   function saveDraft(form,cfg){
     const p=project();if(!p)return;
     const {fields,labels}=serializeForm(form);
@@ -157,7 +167,7 @@
         if(form.dataset.finalSubmitPending==='1'&&id){
           const t=testById(id);
           if(t?.draft){
-            delete t.draft;delete t.draftFields;delete t.draftFieldLabels;delete t.draftSavedAt;
+            clearDraftMeta(t);
             saveData();
             renderTests();
           }
@@ -172,6 +182,25 @@
         form.dataset.finalSubmitPending='1';
         setTimeout(()=>{if(document.getElementById(cfg.dialog)?.open)form.dataset.finalSubmitPending='';},0);
       },true);
+
+      // 完成保存は既存フォーム側のバリデーションが成功した時だけダイアログが閉じる。
+      // その結果を見てドラフト情報を確実に解除する。クリック・Enter・iPhoneの完了操作すべてに対応。
+      form.addEventListener('submit',()=>{
+        const id=form.dataset.draftTestId;
+        if(!id)return;
+        setTimeout(()=>{
+          const activeDialog=document.getElementById(cfg.dialog);
+          if(activeDialog?.open)return;
+          const t=testById(id);
+          if(!t?.draft)return;
+          if(clearDraftMeta(t)){
+            saveData();
+            renderTests();
+          }
+          form.dataset.finalSubmitPending='';
+          form.dataset.draftTestId='';
+        },0);
+      });
     });
   }
 
