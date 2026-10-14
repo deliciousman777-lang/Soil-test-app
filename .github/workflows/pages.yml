@@ -26,7 +26,7 @@ jobs:
 
       - name: Check JavaScript syntax
         run: |
-          for f in app.js sedimentation.js hydrometer-input.js sedimentation-cm-fix.js sedimentation-workbench.js grain-charts.js fine-sieve.js dvalue-spline.js particle-density.js pycnometer-master.js report-sheet.js report-ternary-fix.js atterberg-limits.js cone-index.js report-extra-tests.js sample-manager.js atterberg-np.js review-all-tests.js draft-save.js grain-wash-containers.js test-date.js numeric-input.js supabase-config.js cloud-share.js edit-lock.js; do
+          for f in app.js sedimentation.js hydrometer-input.js sedimentation-cm-fix.js sedimentation-workbench.js sedimentation-alarm.js grain-charts.js fine-sieve.js dvalue-spline.js particle-density.js pycnometer-master.js report-sheet.js report-ternary-fix.js atterberg-limits.js cone-index.js report-extra-tests.js sample-manager.js atterberg-np.js review-all-tests.js draft-save.js grain-wash-containers.js test-date.js numeric-input.js supabase-config.js cloud-share.js edit-lock.js; do
             node --check "$f"
           done
 
@@ -63,6 +63,7 @@ jobs:
               'cloud-share.js',
               'edit-lock.js',
               'sedimentation-workbench.js',
+              'sedimentation-alarm.js',
           ]
 
           anchor = '  <script src="sedimentation.js"></script>'
@@ -108,6 +109,7 @@ jobs:
           assert 'cloud-share.js' in html, 'Cloud share script missing'
           assert 'edit-lock.js' in html, 'Edit lock script missing'
           assert 'sedimentation-workbench.js' in html, 'Sedimentation workbench script missing'
+          assert 'sedimentation-alarm.js' in html, 'Sedimentation alarm script missing'
           assert 'cloud-sync.js' not in html, 'Old cloud sync script must not be published'
           PY
 
