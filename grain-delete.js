@@ -1,17 +1,65 @@
-// 粒度試験カード：個別削除
-// 完成データ・途中保存データの両方を、描画後のカードへ確実に削除ボタンを付ける。
+// 粒度試験カード：個別削除（同期復活防止つき）
+// 削除した試験IDを tombstone として工事データ内に残し、クラウド同期で古い試験が戻っても再除去する。
 (function(){
-  if(window.__soilnoteGrainDeleteV2)return;
-  window.__soilnoteGrainDeleteV2=true;
+  if(window.__soilnoteGrainDeleteV3)return;
+  window.__soilnoteGrainDeleteV3=true;
+
+  const TOMBSTONE_KEY='deletedTestIds';
+  let applying=false;
+  let saveTimer=null;
+
+  function tombstones(project){
+    const raw=project?.[TOMBSTONE_KEY];
+    return raw&&typeof raw==='object'&&!Array.isArray(raw)?raw:{};
+  }
+
+  function markDeleted(project,id){
+    if(!project||!id)return;
+    const map={...tombstones(project)};
+    map[String(id)]=new Date().toISOString();
+    project[TOMBSTONE_KEY]=map;
+  }
+
+  function applyTombstones(saveIfChanged=false){
+    if(applying)return false;
+    applying=true;
+    let changed=false;
+    try{
+      const projects=Array.isArray(state?.data?.projects)?state.data.projects:[];
+      projects.forEach(project=>{
+        const map=tombstones(project);
+        const ids=new Set(Object.keys(map));
+        if(!ids.size||!Array.isArray(project.tests))return;
+        const before=project.tests.length;
+        project.tests=project.tests.filter(test=>!ids.has(String(test?.id||'')));
+        if(project.tests.length!==before){
+          changed=true;
+          const newest=Math.max(0,...Object.values(map).map(v=>new Date(v||0).getTime()).filter(Number.isFinite));
+          if(newest){
+            const current=new Date(project.updatedAt||project.createdAt||0).getTime();
+            if(!Number.isFinite(current)||current<newest)project.updatedAt=new Date(newest).toISOString();
+          }
+        }
+      });
+      if(changed&&saveIfChanged&&typeof saveData==='function'){
+        clearTimeout(saveTimer);
+        saveTimer=setTimeout(()=>{try{saveData();}catch(err){console.error('[GrainDelete] tombstone save',err);}},0);
+      }
+    }catch(err){console.error('[GrainDelete] apply tombstones',err);}
+    finally{applying=false;}
+    return changed;
+  }
 
   function addButtons(){
+    applyTombstones(false);
     const root=document.getElementById('testList');
     if(!root)return;
     root.querySelectorAll('[data-edit-grain]').forEach(edit=>{
       const id=edit.dataset.editGrain;
       if(!id)return;
       const card=edit.closest('article.card');
-      if(!card||card.querySelector(`[data-delete-grain="${CSS.escape(id)}"]`))return;
+      if(!card)return;
+      if(card.querySelector('[data-delete-grain]'))return;
 
       const btn=document.createElement('button');
       btn.type='button';
@@ -32,6 +80,18 @@
     });
   }
 
+  function toast(text){
+    let el=document.getElementById('grainDeleteToast');
+    if(!el){
+      el=document.createElement('div');
+      el.id='grainDeleteToast';
+      el.style.cssText='position:fixed;left:50%;bottom:calc(26px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:10050;background:#8b1f1f;color:#fff;padding:11px 16px;border-radius:999px;font-weight:800;font-size:13px;box-shadow:0 8px 28px rgba(0,0,0,.22);opacity:0;transition:opacity .2s;pointer-events:none;';
+      document.body.appendChild(el);
+    }
+    el.textContent=text;el.style.opacity='1';
+    clearTimeout(toast._timer);toast._timer=setTimeout(()=>{el.style.opacity='0';},1700);
+  }
+
   if(!document.getElementById('grainDeleteStyle')){
     const s=document.createElement('style');
     s.id='grainDeleteStyle';
@@ -48,17 +108,20 @@
     const btn=e.target.closest?.('[data-delete-grain]');
     if(!btn)return;
     e.preventDefault();
-    e.stopPropagation();
+    e.stopImmediatePropagation();
 
-    const id=btn.dataset.deleteGrain;
+    const id=String(btn.dataset.deleteGrain||'');
     let p=null;
     try{p=currentProject?.()||null;}catch{}
     if(!p){alert('工事件名を開き直してから削除してください。');return;}
 
-    const test=p.tests?.find(t=>t.id===id&&t.type==='grain');
+    const test=p.tests?.find(t=>String(t?.id||'')===id&&t.type==='grain');
     if(!test){
-      alert('削除対象の粒度試験が見つかりません。画面を開き直してください。');
-      addButtons();
+      // すでに消えている場合も tombstone を残して復活防止する。
+      markDeleted(p,id);
+      p.updatedAt=new Date().toISOString();
+      try{saveData();renderTests?.();renderProjects?.();}catch(err){console.error(err);}
+      toast('削除済みです');
       return;
     }
 
@@ -66,15 +129,30 @@
     const stateText=test.draft?'途中保存の粒度試験':'粒度試験';
     if(!confirm(`「${sample}」の${stateText}を削除しますか？\nこの操作は元に戻せません。`))return;
 
-    const before=p.tests.length;
-    p.tests=p.tests.filter(t=>t.id!==id);
-    if(p.tests.length===before){alert('削除できませんでした。');return;}
-
+    markDeleted(p,id);
+    p.tests=p.tests.filter(t=>String(t?.id||'')!==id);
     p.updatedAt=new Date().toISOString();
+
     try{saveData();}catch(err){console.error(err);alert('保存処理でエラーが発生しました。');return;}
-    try{renderTests();renderProjects();}catch(err){console.error(err);}
+    applyTombstones(false);
+    try{renderTests?.();renderProjects?.();}catch(err){console.error(err);}
+    toast('粒度試験を削除しました');
     setTimeout(addButtons,0);
   },true);
+
+  // 他機能・クラウド同期が一覧を再描画しても tombstone を先に適用する。
+  if(typeof renderTests==='function'&&!renderTests.__grainDeletePatched){
+    const base=renderTests;
+    const wrapped=function(){applyTombstones(true);const result=base.apply(this,arguments);queueMicrotask(addButtons);return result;};
+    wrapped.__grainDeletePatched=true;
+    renderTests=wrapped;
+  }
+  if(typeof renderProjects==='function'&&!renderProjects.__grainDeletePatched){
+    const base=renderProjects;
+    const wrapped=function(){applyTombstones(true);return base.apply(this,arguments);};
+    wrapped.__grainDeletePatched=true;
+    renderProjects=wrapped;
+  }
 
   const root=document.getElementById('testList');
   if(root){
@@ -82,10 +160,26 @@
     observer.observe(root,{childList:true,subtree:true});
   }
 
-  document.addEventListener('click',e=>{
-    if(e.target.closest?.('#backBtn,.card-button,[data-edit-grain],#addGrainBtn'))setTimeout(addButtons,0);
+  document.addEventListener('visibilitychange',()=>{
+    if(document.visibilityState==='visible'){
+      if(applyTombstones(true)){try{renderTests?.();renderProjects?.();}catch{}}
+      setTimeout(addButtons,0);
+    }
+  });
+  window.addEventListener('focus',()=>{
+    if(applyTombstones(true)){try{renderTests?.();renderProjects?.();}catch{}}
+    setTimeout(addButtons,0);
   });
 
+  // クラウドの10秒ポーリング直後にも復活を抑止。
+  setInterval(()=>{
+    if(document.visibilityState!=='visible')return;
+    const changed=applyTombstones(true);
+    if(changed){try{renderTests?.();renderProjects?.();}catch{}}
+    addButtons();
+  },2500);
+
+  applyTombstones(true);
   addButtons();
   setTimeout(addButtons,100);
 })();
