@@ -1,14 +1,16 @@
 // SoilNote 沈降分析アラーム
-// 進行中の沈降分析を監視し、各測定時刻に音・通知・画面表示で知らせる。
+// 進行中の沈降分析を監視し、5分以降の各測定時刻に音・通知・画面表示で知らせる。
 (function(){
   const RUNS_KEY='soilnote-sedimentation-runs-v1';
   const ALARM_STATE_KEY='soilnote-sedimentation-alarm-state-v1';
   const SETTINGS_KEY='soilnote-sedimentation-alarm-settings-v1';
   const TIMES=[1,2,5,15,30,60,240,1440];
+  // 1分・2分は測定データとして残すが、アラームは5分から鳴らす。
+  const ALARM_INDEXES=[2,3,4,5,6,7];
   let audioCtx=null;
   let lastTick=0;
 
-  const esc=v=>typeof escapeHtml==='function'?escapeHtml(v):String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+  const esc=v=>typeof escapeHtml==='function'?escapeHtml(v):String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#039;'}[c]));
 
   function loadJson(key,fallback){
     try{const v=JSON.parse(localStorage.getItem(key));return v??fallback;}catch{return fallback;}
@@ -146,7 +148,7 @@
     for(const run of runs()){
       if(run.status==='finished'||!run.startAt)continue;
       const start=startMs(run);if(start==null)continue;
-      for(let i=0;i<TIMES.length;i++){
+      for(const i of ALARM_INDEXES){
         if(!readingMissing(run,i))continue;
         const due=start+TIMES[i]*60000;
         if(now<due)continue;
@@ -163,7 +165,7 @@
   }
 
   function cleanupAlarmState(){
-    const activeIds=new Set(runs().flatMap(run=>TIMES.map((_,i)=>alarmId(run,i))));
+    const activeIds=new Set(runs().flatMap(run=>ALARM_INDEXES.map(i=>alarmId(run,i))));
     const map=alarmState();let changed=false;
     Object.keys(map).forEach(k=>{if(!activeIds.has(k)){delete map[k];changed=true;}});
     if(changed)saveJson(ALARM_STATE_KEY,map);
