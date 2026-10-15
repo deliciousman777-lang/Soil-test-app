@@ -26,7 +26,7 @@ jobs:
 
       - name: Check JavaScript syntax
         run: |
-          for f in app.js grain-delete-early.js sedimentation.js hydrometer-input.js sedimentation-cm-fix.js sedimentation-workbench.js sedimentation-workbench-focus-fix.js sedimentation-alarm.js sedimentation-auto-open.js grain-delete.js grain-charts.js fine-sieve.js dvalue-spline.js particle-density.js pycnometer-master.js report-sheet.js report-ternary-fix.js atterberg-limits.js cone-index.js report-extra-tests.js sample-manager.js atterberg-np.js review-all-tests.js draft-save.js grain-wash-containers.js test-date.js numeric-input.js supabase-config.js cloud-share.js edit-lock.js; do
+          for f in app.js grain-delete-early.js sedimentation.js hydrometer-input.js sedimentation-cm-fix.js sedimentation-workbench.js sedimentation-workbench-focus-fix.js sedimentation-alarm.js sedimentation-auto-open.js grain-delete.js grain-charts.js fine-sieve.js dvalue-spline.js particle-density.js pycnometer-master.js report-sheet.js report-ternary-fix.js atterberg-limits.js cone-index.js report-extra-tests.js sample-manager.js atterberg-np.js review-all-tests.js draft-save.js grain-wash-containers.js test-date.js numeric-input.js supabase-config.js cloud-share.js edit-lock.js project-test-plan.js; do
             node --check "$f"
           done
 
@@ -68,6 +68,7 @@ jobs:
               'sedimentation-alarm.js',
               'grain-delete.js',
               'sedimentation-auto-open.js',
+              'project-test-plan.js',
           ]
 
           anchor = '  <script src="sedimentation.js"></script>'
@@ -118,6 +119,7 @@ jobs:
           assert 'sedimentation-alarm.js' in html, 'Sedimentation alarm script missing'
           assert 'grain-delete.js' in html, 'Grain delete script missing'
           assert 'sedimentation-auto-open.js' in html, 'Sedimentation auto-open script missing'
+          assert 'project-test-plan.js' in html, 'Project test plan script missing'
           assert 'cloud-sync.js' not in html, 'Old cloud sync script must not be published'
           PY
 
