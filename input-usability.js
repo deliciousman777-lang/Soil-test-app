@@ -1,26 +1,81 @@
 // SoilNote 入力操作改善
-// 1) 液性・塑性限界試験で横スクロールしても No. / 容器No. を固定表示
+// 1) 液性・塑性限界試験の容器No.を左端へ移し、iPhoneでも横スクロール中に固定表示
 // 2) 沈降分析の土粒子密度を、同一工事・同一試料の土粒子密度試験から自動入力
 (function(){
+  function rearrangeAtterbergColumns(){
+    const dialog=document.getElementById('atterbergDialog');
+    if(!dialog || dialog.dataset.containerColumnsFixed==='1') return;
+
+    const tables=dialog.querySelectorAll('.att-table');
+    const liquid=tables[0];
+    const plastic=tables[1];
+
+    // 液性限界: No. / 落下回数 / 容器No. → 容器No. / No. / 落下回数
+    if(liquid){
+      const head=liquid.tHead?.rows?.[0];
+      if(head?.cells?.length>=3) head.insertBefore(head.cells[2],head.cells[0]);
+      Array.from(liquid.tBodies?.[0]?.rows||[]).forEach(row=>{
+        if(row.cells.length>=3) row.insertBefore(row.cells[2],row.cells[0]);
+      });
+      liquid.classList.add('att-frozen-table');
+    }
+
+    // 塑性限界: No. / 容器No. → 容器No. / No.
+    if(plastic){
+      const head=plastic.tHead?.rows?.[0];
+      if(head?.cells?.length>=2) head.insertBefore(head.cells[1],head.cells[0]);
+      Array.from(plastic.tBodies?.[0]?.rows||[]).forEach(row=>{
+        if(row.cells.length>=2) row.insertBefore(row.cells[1],row.cells[0]);
+      });
+      plastic.classList.add('att-frozen-table');
+    }
+
+    dialog.dataset.containerColumnsFixed='1';
+  }
+
   function addAtterbergStickyStyles(){
     if(document.getElementById('soilnoteInputUsabilityStyles')) return;
     const s=document.createElement('style');
     s.id='soilnoteInputUsabilityStyles';
     s.textContent=`
-      #atterbergDialog .att-table tr > :first-child{
-        position:sticky;left:0;z-index:3;min-width:46px;width:46px;background:#fff;
+      #atterbergDialog .table-wrap{position:relative;isolation:isolate}
+      #atterbergDialog .att-frozen-table{
+        border-collapse:separate!important;
+        border-spacing:0!important;
       }
-      #atterbergDialog .att-panel:first-of-type .att-table tr > :nth-child(3),
-      #atterbergDialog .att-panel:nth-of-type(2) .att-table tr > :nth-child(2){
-        position:sticky;left:46px;z-index:2;min-width:112px;width:112px;background:#fff;
-        box-shadow:2px 0 0 var(--line),7px 0 12px rgba(30,60,52,.08);
+      #atterbergDialog .att-frozen-table tr > :first-child{
+        position:-webkit-sticky!important;
+        position:sticky!important;
+        left:0!important;
+        z-index:6!important;
+        min-width:132px!important;
+        width:132px!important;
+        max-width:132px!important;
+        background:#fff!important;
+        text-align:left!important;
+        box-shadow:2px 0 0 var(--line),8px 0 14px rgba(30,60,52,.10);
       }
-      #atterbergDialog .att-table thead tr > :first-child,
-      #atterbergDialog .att-panel:first-of-type .att-table thead tr > :nth-child(3),
-      #atterbergDialog .att-panel:nth-of-type(2) .att-table thead tr > :nth-child(2){
-        z-index:5;background:#eef4f2;
+      #atterbergDialog .att-frozen-table tr > :nth-child(2){
+        position:-webkit-sticky!important;
+        position:sticky!important;
+        left:132px!important;
+        z-index:5!important;
+        min-width:48px!important;
+        width:48px!important;
+        max-width:48px!important;
+        background:#fff!important;
+        text-align:center!important;
       }
-      #atterbergDialog .att-table tbody tr > :first-child{font-weight:800}
+      #atterbergDialog .att-frozen-table thead tr > :first-child,
+      #atterbergDialog .att-frozen-table thead tr > :nth-child(2){
+        z-index:9!important;
+        background:#eef4f2!important;
+      }
+      #atterbergDialog .att-frozen-table tbody tr > :nth-child(2){font-weight:800}
+      #atterbergDialog .att-frozen-table tr > :first-child input{
+        width:105px!important;
+        min-width:105px!important;
+      }
       #grainForm input[name="particleDensity"][data-auto-pd="1"]{background:#eef8f3}
       .sed-pd-auto-note{display:block;margin-top:5px;font-size:11px;color:var(--muted);font-weight:700}
       .sed-pd-auto-note.active{color:var(--accent-dark)}
@@ -180,6 +235,7 @@
   }
 
   function init(){
+    rearrangeAtterbergColumns();
     addAtterbergStickyStyles();
     initDensityAutoFill();
   }
