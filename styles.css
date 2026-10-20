@@ -78,7 +78,7 @@ input[type="checkbox"]{width:auto;margin:0}.grid2,.measurement-grid{display:grid
 .test-actions::after{content:"力学試験";grid-row:3;margin-top:4px}
 .test-actions button{width:100%;min-width:0;min-height:52px;white-space:normal;line-height:1.25}
 #addParticleDensityBtn{grid-column:1;grid-row:2}
-#addMoistureBtn{grid-column:2;grid-row:2}
+#addMoistureBtn{grid-column:2;grid-row:2;background:#285d78}
 #addGrainBtn{grid-column:3;grid-row:2}
 #addAtterbergBtn{grid-column:4;grid-row:2}
 #addCompactionBtn{grid-column:1/3;grid-row:4}
