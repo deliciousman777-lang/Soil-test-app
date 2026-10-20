@@ -12,6 +12,16 @@
       .sort((a,b)=>String(b.updatedAt||b.createdAt||'').localeCompare(String(a.updatedAt||a.createdAt||'')))[0]||null;
   }
   function metaFor(p,sample){return p?.reportMeta?.[sample]||{depth:'',tester:'',testDate:'',item:'室内土質試験'};}
+  function testDateValue(test){return test?.draftFields?.testDate||test?.testDate||'';}
+  function displayDate(value){
+    if(!value)return '';
+    const m=String(value).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    return m?`${m[1]}/${m[2]}/${m[3]}`:String(value);
+  }
+  function dateLabel(test){
+    const value=displayDate(testDateValue(test));
+    return `<span class="r-small r-test-date" data-test-date-label style="float:right;font-weight:700">試験日：${esc(value||'—')}</span>`;
+  }
 
   function header(p,sample,meta){
     return `<div class="r-head">
@@ -46,7 +56,7 @@
     const wr=Array.from({length:2},(_,i)=>waters[i]||{});
     const pens=Array.isArray(test?.penetrations)?test.penetrations:[];
     const pr=[5,7.5,10].map(depth=>pens.find(x=>Number(x.depth)===depth)||{});
-    return `<div class="r-section"><div class="r-section-title">締固めた土のコーン指数試験 <span class="r-small">JIS A 1228 / JGS 0716</span></div>
+    return `<div class="r-section"><div class="r-section-title">締固めた土のコーン指数試験 <span class="r-small">JIS A 1228 / JGS 0716</span>${dateLabel(test)}</div>
       <table class="r-table"><tr><th colspan="6">含水比</th></tr><tr><th>測定</th><th>容器No.</th><th>m<sub>a</sub> 容器＋湿潤土 (g)</th><th>m<sub>b</sub> 容器＋乾燥土 (g)</th><th>m<sub>c</sub> 容器 (g)</th><th>w (%)</th></tr>
       ${wr.map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.containerNo||'')}</td><td>${f(r.ma,1)}</td><td>${f(r.mb,1)}</td><td>${f(r.mc,1)}</td><td>${f(r.w,1)}</td></tr>`).join('')}
       <tr class="r-total"><th colspan="5">平均含水比 w</th><td>${finite(test?.moistureAverage)?f(test.moistureAverage,1)+' %':''}</td></tr></table>
@@ -68,11 +78,35 @@
     return `<section class="report-page" id="reportPage3">${header(p,sample,meta)}${atterbergSection(att)}${coneSection(cone)}</section>`;
   }
 
-  function patchCounters(total){
-    const p1=document.querySelector('#reportPage1 > .r-small');
-    const p2=document.querySelector('#reportPage2 > .r-small');
+  function addMoistureDate(root,p,sample){
+    if(!root||!p)return;
+    const moisture=latest(p.tests,'moisture',sample);
+    const page=root.querySelector?.('#reportPage1');
+    if(!page)return;
+    const title=[...page.querySelectorAll('.r-section-title')].find(el=>el.textContent.trim().startsWith('含水比試験'));
+    if(!title)return;
+    title.querySelector('[data-test-date-label]')?.remove();
+    const span=document.createElement('span');
+    span.className='r-small r-test-date';
+    span.dataset.testDateLabel='';
+    span.style.cssText='float:right;font-weight:700';
+    span.textContent=`試験日：${displayDate(testDateValue(moisture))||'—'}`;
+    title.appendChild(span);
+  }
+
+  function patchPageCounters(root,total){
+    if(!root)return;
+    const p1=root.querySelector('#reportPage1 > .r-small');
+    const p2=root.querySelector('#reportPage2 > .r-small');
+    const p3=root.querySelector('#reportPage3 > .r-small');
     if(p1)p1.textContent=`1 / ${total}`;
     if(p2)p2.textContent=`2 / ${total}`;
+    if(p3)p3.textContent=`3 / ${total}`;
+  }
+
+  function patchCounters(total){
+    const root=document.getElementById('reportPages');
+    patchPageCounters(root,total);
     const hint=document.querySelector('#reportSheetDialog .report-ui span');
     if(hint)hint.textContent=total===3?'保存済み試験から1・2・3枚目を自動作成':'保存済み試験から1・2枚目を自動作成';
   }
@@ -82,13 +116,39 @@
     const select=document.getElementById('reportSampleSelect');
     const p=project();
     if(!root||!select||!p||!document.getElementById('reportPage1'))return;
-    if(document.getElementById('reportPage3')){patchCounters(3);return;}
     const sample=select.value||'';
+    addMoistureDate(root,p,sample);
+    if(root.querySelector('#reportPage3')){patchCounters(3);return;}
     const att=latest(p.tests,'atterberg',sample);
     const cone=latest(p.tests,'cone-index',sample);
     if(!att&&!cone){patchCounters(2);return;}
     root.insertAdjacentHTML('beforeend',makePage3(p,sample,att,cone));
     patchCounters(3);
+  }
+
+  function enhancePrintRoot(){
+    const printRoot=document.getElementById('soilnotePrintRoot');
+    const select=document.getElementById('reportSampleSelect');
+    const p=project();
+    if(!printRoot||!select||!p)return;
+    const sample=select.value||'';
+    addMoistureDate(printRoot,p,sample);
+    const att=latest(p.tests,'atterberg',sample);
+    const cone=latest(p.tests,'cone-index',sample);
+    if((att||cone)&&!printRoot.querySelector('#reportPage3')){
+      printRoot.insertAdjacentHTML('beforeend',makePage3(p,sample,att,cone));
+    }
+    patchPageCounters(printRoot,att||cone?3:2);
+  }
+
+  function installPrintEnhancer(){
+    if(window.__soilNoteReportPrintEnhanced)return;
+    const nativePrint=window.print.bind(window);
+    window.print=function(){
+      try{enhancePrintRoot();}catch(err){console.warn('report print date enhancement failed',err);}
+      return nativePrint();
+    };
+    window.__soilNoteReportPrintEnhanced=true;
   }
 
   function setup(){
@@ -97,6 +157,7 @@
     const observer=new MutationObserver(()=>requestAnimationFrame(enhance));
     observer.observe(root,{childList:true,subtree:false});
     document.getElementById('reportSampleSelect')?.addEventListener('change',()=>requestAnimationFrame(enhance));
+    installPrintEnhancer();
     requestAnimationFrame(enhance);
   }
 
