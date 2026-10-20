@@ -358,7 +358,7 @@
     const detail=document.getElementById('detailView');
     if(!detail)return;
     const disable=[];
-    detail.querySelectorAll('.test-actions button,#editProjectInfoBtn,#deleteProjectBtn,#cancelProjectCompletion').forEach(btn=>disable.push(btn));
+    detail.querySelectorAll('.test-actions button:not(#openReportBtn),#editProjectInfoBtn,#deleteProjectBtn,#cancelProjectCompletion').forEach(btn=>disable.push(btn));
     detail.querySelectorAll('button').forEach(btn=>{
       if([...btn.attributes].some(a=>a.name.startsWith('data-edit-')))disable.push(btn);
       if(btn.matches('[data-delete-test],[data-delete-grain],[data-delete-moisture]'))disable.push(btn);
@@ -372,6 +372,12 @@
         delete btn.dataset.workflowWasDisabled;btn.classList.remove('workflow-readonly');
       }
     });
+    const reportBtn=document.getElementById('openReportBtn');
+    if(organized&&reportBtn){
+      reportBtn.disabled=false;
+      reportBtn.classList.remove('workflow-readonly');
+      delete reportBtn.dataset.workflowWasDisabled;
+    }
   }
 
   function renderDetailWorkflow(){
