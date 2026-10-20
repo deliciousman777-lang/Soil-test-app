@@ -5,12 +5,17 @@
   'use strict';
 
   const PLAN_FIELD = 'plannedTestType';
+  const TEST_GROUPS = [
+    { key:'physical', label:'物理試験', icon:'📁', tests:['particleDensity','moisture','grain','atterberg'] },
+    { key:'mechanical', label:'力学試験', icon:'📁', tests:['compaction','cone-index'] },
+  ];
   const TEST_DEFS = [
-    { key:'moisture', label:'含水比', types:['moisture'] },
-    { key:'grain', label:'粒度', types:['grain'] },
-    { key:'particleDensity', label:'土粒子の密度', types:['particleDensity'] },
-    { key:'atterberg', label:'液性・塑性限界', types:['atterberg'] },
-    { key:'cone-index', label:'コーン指数', types:['cone-index'] },
+    { key:'particleDensity', label:'土粒子の密度', types:['particleDensity'], group:'physical' },
+    { key:'moisture', label:'含水比', types:['moisture'], group:'physical' },
+    { key:'grain', label:'粒度', types:['grain'], group:'physical' },
+    { key:'atterberg', label:'液性・塑性限界', types:['atterberg'], group:'physical' },
+    { key:'compaction', label:'締め固め', types:['compaction'], group:'mechanical' },
+    { key:'cone-index', label:'コーン指数', types:['cone-index'], group:'mechanical' },
   ];
   const VALID_KEYS = new Set(TEST_DEFS.map(x=>x.key));
 
@@ -56,12 +61,23 @@
     return {plan,done,total:plan.length};
   }
 
-  function selectorHtml(){
-    return TEST_DEFS.map(def=>`
+  function choiceHtml(def){
+    return `
       <label class="plan-choice">
         <input type="checkbox" name="${PLAN_FIELD}" value="${esc(def.key)}">
         <span>${esc(def.label)}</span>
-      </label>`).join('');
+      </label>`;
+  }
+
+  function selectorHtml(){
+    return TEST_GROUPS.map(group=>{
+      const defs=group.tests.map(key=>TEST_DEFS.find(def=>def.key===key)).filter(Boolean);
+      return `
+        <section class="project-plan-folder" data-plan-group="${esc(group.key)}">
+          <div class="project-plan-folder-title"><span>${group.icon}</span><strong>${esc(group.label)}</strong></div>
+          <div class="project-plan-options">${defs.map(choiceHtml).join('')}</div>
+        </section>`;
+    }).join('');
   }
 
   function injectSelector(form, id){
@@ -71,7 +87,7 @@
     block.dataset.projectPlanSelector=id;
     block.innerHTML=`
       <div class="project-plan-label"><strong>予定している試験</strong><small>複数選択できます。試験データを保存すると自動で✓になります。</small></div>
-      <div class="project-plan-options">${selectorHtml()}</div>`;
+      <div class="project-plan-folders">${selectorHtml()}</div>`;
     const actions=form.querySelector('.dialog-actions');
     if(actions) form.insertBefore(block,actions); else form.appendChild(block);
   }
@@ -82,11 +98,12 @@
     style.id='projectTestPlanStyle';
     style.textContent=`
       .project-plan-selector{margin:14px 0 4px;padding:14px;border:1px solid var(--line,#dfe7e3);border-radius:16px;background:#f8fbfa}
-      .project-plan-label{display:flex;flex-direction:column;gap:3px;margin-bottom:10px}.project-plan-label strong{font-size:14px;color:#1f2a24}.project-plan-label small{font-size:11px;line-height:1.45;color:var(--muted,#68766e)}
-      .project-plan-options{display:grid;grid-template-columns:1fr 1fr;gap:8px}.plan-choice{display:flex!important;align-items:center;gap:8px;margin:0!important;padding:10px 11px;border:1px solid var(--line,#dfe7e3);border-radius:12px;background:#fff;font-weight:700;font-size:13px;cursor:pointer}.plan-choice input{width:20px;height:20px;margin:0;accent-color:var(--accent-dark,#0b5136)}.plan-choice:has(input:checked){background:#eaf5f0;border-color:#9ac6b3}
+      .project-plan-label{display:flex;flex-direction:column;gap:3px;margin-bottom:12px}.project-plan-label strong{font-size:14px;color:#1f2a24}.project-plan-label small{font-size:11px;line-height:1.45;color:var(--muted,#68766e)}
+      .project-plan-folders{display:grid;grid-template-columns:1fr 1fr;gap:10px}.project-plan-folder{margin:0;padding:11px;border:1px solid var(--line,#dfe7e3);border-radius:14px;background:#fff}.project-plan-folder-title{display:flex;align-items:center;gap:7px;margin-bottom:9px;padding-bottom:8px;border-bottom:1px solid #edf1ef;color:#32443b}.project-plan-folder-title span{font-size:15px}.project-plan-folder-title strong{font-size:13px}
+      .project-plan-options{display:grid;grid-template-columns:1fr;gap:7px}.plan-choice{display:flex!important;align-items:center;gap:8px;margin:0!important;padding:10px 11px;border:1px solid var(--line,#dfe7e3);border-radius:12px;background:#fff;font-weight:700;font-size:13px;cursor:pointer}.plan-choice input{width:20px;height:20px;margin:0;accent-color:var(--accent-dark,#0b5136)}.plan-choice:has(input:checked){background:#eaf5f0;border-color:#9ac6b3}
       .project-plan-row{margin:10px 0 2px;padding-top:8px;border-top:1px solid #edf1ef}.project-plan-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:7px}.project-plan-head strong{font-size:12px;color:#53605d}.project-plan-progress{font-size:11px;font-weight:800;color:var(--accent-dark,#0b5136)}.project-plan-chips{display:flex;flex-wrap:wrap;gap:6px}.project-plan-chip{display:inline-flex;align-items:center;gap:4px;padding:5px 8px;border-radius:999px;background:#f0f3f2;color:#66736d;font-size:11px;font-weight:800;line-height:1}.project-plan-chip.done{background:#e5f5ed;color:#087443}.project-plan-chip.done::before{content:'✓';font-size:12px}.project-plan-chip.pending::before{content:'○';font-size:12px;color:#8a9690}
       .project-plan-detail{margin:10px 0 16px;padding:12px 14px;border:1px solid var(--line,#dfe7e3);border-radius:14px;background:#f8fbfa}.project-plan-detail .project-plan-row{margin:0;padding:0;border:0}
-      @media(max-width:560px){.project-plan-options{grid-template-columns:1fr}.project-plan-selector{padding:12px}.project-plan-chip{font-size:10.5px;padding:5px 7px}}
+      @media(max-width:560px){.project-plan-folders{grid-template-columns:1fr}.project-plan-selector{padding:12px}.project-plan-chip{font-size:10.5px;padding:5px 7px}}
     `;
     document.head.appendChild(style);
   }
