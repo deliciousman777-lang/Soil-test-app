@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 path = Path('compaction.js')
 s = path.read_text(encoding='utf-8')
@@ -9,6 +10,14 @@ def replace_once(old, new, label):
     if old not in s:
         raise SystemExit(f'Patch target not found: {label}')
     s = s.replace(old, new, 1)
+
+
+def regex_replace_once(pattern, replacement, label):
+    global s
+    s2, count = re.subn(pattern, replacement, s, count=1)
+    if count != 1:
+        raise SystemExit(f'Patch target not found or ambiguous: {label} ({count})')
+    s = s2
 
 
 replace_once(
@@ -38,8 +47,8 @@ replace_once(
     'applyMethodPreset function'
 )
 
-replace_once(
-    '<label>試験方法<input name=\\"method\\" value=\\"B-b\\" autocomplete=\\"off\\"></label>',
+regex_replace_once(
+    r'<label>試験方法<input[^>]*></label>',
     '<label>試験方法<select name=\\"method\\"><option value=\\"B-b\\">B-b法</option><option value=\\"A-b\\">A-b法</option><option value=\\"B-c\\">B-c法</option><option value=\\"A-c\\">A-c法</option><option value=\\"E\\">E法</option></select></label>',
     'method selector'
 )
@@ -50,9 +59,9 @@ replace_once(
     'condition guidance'
 )
 
-replace_once(
-    'name=\\"maxParticle\\" inputmode=\\"decimal\\" value=\\"53\\"',
-    'name=\\"maxParticle\\" inputmode=\\"decimal\\" value=\\"37.5\\"',
+regex_replace_once(
+    r'<label>試料最大粒径 \(mm\)<input[^>]*></label>',
+    '<label>試料最大粒径 (mm)<input name=\\"maxParticle\\" inputmode=\\"decimal\\" value=\\"37.5\\"></label>',
     'B-b max particle default'
 )
 
