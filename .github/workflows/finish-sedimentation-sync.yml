@@ -1,0 +1,34 @@
+name: Finish sedimentation sync
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/finish-sedimentation-sync.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Finish sedimentation sync
+        run: python .github/scripts/finish_sedimentation_sync.py
+      - name: Check JavaScript syntax
+        run: |
+          node --check sedimentation.js
+          node --check fine-sieve.js
+          node --check input-usability.js
+          node --check sw.js
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add fine-sieve.js sw.js
+          git diff --cached --check
+          git commit -m "Finish sedimentation input sync"
+          git push
