@@ -46,9 +46,7 @@ function injectSedimentationLabUI() {
     <div class="sed-lab-settings">
       <label>メスシリンダーNo.<input name="cylinderNo" autocomplete="off" placeholder="例：1" /></label>
       <label>浮ひょうNo.<input name="hydrometerNo" autocomplete="off" value="1" placeholder="例：1" /></label>
-      <label>沈降分析用試料の乾燥質量 ms1 (g)
-        <div class="voice-input"><input name="sedDryMass" inputmode="decimal" placeholder="例：73.4" /><button type="button" class="mic" data-voice="sedDryMass" data-form="grainForm">🎤</button></div>
-      </label>
+      <label>2 mm通過試料の炉乾燥質量 ms1 (g)<input name="sedDryMass" inputmode="decimal" readonly placeholder="上の2 mm通過試料質量から自動" /></label>
       <label>土粒子の密度 ρs (Mg/m³)<input name="particleDensity" inputmode="decimal" placeholder="例：2.637" /></label>
       <label>メニスカス補正値 Cm<input name="meniscusCorrectionDisplay" value="0.0005" readonly /></label>
       <label>測定時の水温 (℃)<input name="sedWaterTemp" inputmode="decimal" value="22" placeholder="例：22" /></label>
@@ -56,7 +54,7 @@ function injectSedimentationLabUI() {
       <label>補正係数 F<input name="sedCorrectionF" inputmode="decimal" value="0.0010" placeholder="例：0.0010" /></label>
       <label>使用した分散剤<input name="dispersant" autocomplete="off" value="ヘキサメタリン酸ナトリウム" /></label>
       <label>溶液添加量 (mL)<input name="solutionAddition" inputmode="decimal" value="10" /></label>
-      <label>2 mm通過質量比 (%)<input id="twoMmPassRatio" name="twoMmPassRatio" inputmode="decimal" placeholder="ふるい分析から自動" /></label>
+      <label>2 mm通過質量比 (%)<input id="twoMmPassRatio" name="twoMmPassRatio" inputmode="decimal" readonly placeholder="ふるい分析から自動" /></label>
     </div>
     <div class="sed-info-grid">
       <div><span>水の密度 ρw</span><strong id="waterDensityPreview">—</strong><small>Mg/m³</small></div>
@@ -64,7 +62,7 @@ function injectSedimentationLabUI() {
       <div><span>水温</span><strong id="sedTempPreview">—</strong><small>℃・全測定共通</small></div>
       <div><span>Cm</span><strong>0.0005</strong><small>固定</small></div>
     </div>
-    <p class="hint">水温・F・開始時刻は上で1回だけ入力。各測定では浮ひょうの読み r だけ入力すれば、測定時刻・r+Cm・有効深さL・K・粒径d・P・P(d)を自動計算します。</p>
+    <p class="hint">上の「2 mmふるい通過試料の炉乾燥質量 ms1」を1回入力すれば沈降分析にも自動反映します。あとは浮ひょうの読み r を入力すると、測定時刻・r+Cm・有効深さL・K・粒径d・P・P(d)を自動計算します。</p>
     <div class="table-wrap">
       <table class="grain-table sed-table" style="min-width:1180px">
         <thead><tr>
@@ -114,7 +112,8 @@ function buildSedimentationRows() {
 function sedimentationSettingsExt() {
   const cylinderNo = grainForm.elements.cylinderNo?.value.trim() ?? '';
   const hydrometerNo = grainForm.elements.hydrometerNo?.value.trim() || '1';
-  const ms1 = Number(grainForm.elements.sedDryMass?.value);
+  const fineMassRaw = grainForm.elements.fineDryMass?.value ?? grainForm.elements.sedDryMass?.value ?? '';
+  const ms1 = Number(fineMassRaw);
   const rhoS = Number(grainForm.elements.particleDensity?.value);
   const temp = Number(grainForm.elements.sedWaterTemp?.value);
   const correctionF = Number(grainForm.elements.sedCorrectionF?.value);
@@ -201,7 +200,7 @@ function updateSedimentationPreview() {
   if (!check) return;
   check.classList.remove('error');
   if (!settings.valid) {
-    check.textContent = '沈降分析用乾燥質量・土粒子密度・水温・F・2 mm通過率を確認してください。';
+    check.textContent = '2 mm通過試料質量・土粒子密度・水温・F・2 mm通過率を確認してください。';
     check.classList.add('error');
   } else if (invalid) {
     check.textContent = '⚠ 浮ひょうの読みを確認してください。';
@@ -246,13 +245,25 @@ function getSedimentationPayloadExt() {
   };
 }
 
+function syncSedDryMassFromFine() {
+  const source = grainForm.elements.fineDryMass;
+  const target = grainForm.elements.sedDryMass;
+  if (!target) return;
+  const raw = source?.value?.trim() ?? '';
+  target.value = raw;
+}
+
 function syncTwoMmPassingRatio() {
+  syncSedDryMassFromFine();
   const field = grainForm.elements.twoMmPassRatio;
-  if (!field || document.activeElement === field) return;
+  if (!field) return;
   const result = calculateGrain();
-  if (!result.valid) return;
+  if (!result.valid) {
+    field.value = '';
+    return;
+  }
   const row2 = result.sieves?.find(row => row.size === 2);
-  if (row2?.passing != null) field.value = row2.passing.toFixed(2);
+  field.value = row2?.passing != null ? row2.passing.toFixed(2) : '';
 }
 
 injectSedimentationLabUI();
@@ -269,6 +280,8 @@ resetGrainDialog = function() {
   if (grainForm.elements.solutionAddition) grainForm.elements.solutionAddition.value = '10';
   if (useSedimentationEl) useSedimentationEl.checked = false;
   sedimentationSectionEl?.classList.add('hidden');
+  syncSedDryMassFromFine();
+  syncTwoMmPassingRatio();
   updateSedimentationPreview();
 };
 
@@ -283,7 +296,8 @@ openEditGrain = function(testId) {
   const s = sed?.settings || {};
   if (grainForm.elements.cylinderNo) grainForm.elements.cylinderNo.value = s.cylinderNo ?? '';
   if (grainForm.elements.hydrometerNo) grainForm.elements.hydrometerNo.value = s.hydrometerNo ?? '1';
-  if (grainForm.elements.sedDryMass) grainForm.elements.sedDryMass.value = s.ms1 ?? '';
+  if (grainForm.elements.fineDryMass && !String(grainForm.elements.fineDryMass.value || '').trim() && s.ms1 != null) grainForm.elements.fineDryMass.value = s.ms1;
+  syncSedDryMassFromFine();
   if (grainForm.elements.particleDensity) grainForm.elements.particleDensity.value = s.rhoS ?? '';
   if (grainForm.elements.sedWaterTemp) grainForm.elements.sedWaterTemp.value = s.waterTemp ?? s.referenceTemp ?? sed?.rows?.[0]?.temp ?? 22;
   if (grainForm.elements.sedStartTime) grainForm.elements.sedStartTime.value = s.startTime ?? '09:00';
