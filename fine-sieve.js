@@ -208,6 +208,8 @@
     previousReset();
     if (grainForm.elements.fineDryMass) grainForm.elements.fineDryMass.value = '';
     updateGrainPreviewFine();
+    if (typeof syncTwoMmPassingRatio === 'function') syncTwoMmPassingRatio();
+    if (typeof updateSedimentationPreview === 'function') updateSedimentationPreview();
   };
 
   const previousEdit = openEditGrain;
