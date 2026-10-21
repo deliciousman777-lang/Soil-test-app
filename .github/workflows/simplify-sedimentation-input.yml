@@ -31,3 +31,5 @@ jobs:
           git diff --cached --check
           git commit -m "Simplify sedimentation analysis input"
           git push
+
+# retry after script fix
