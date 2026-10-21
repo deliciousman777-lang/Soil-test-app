@@ -79,7 +79,7 @@ function syncTwoMmPassingRatio() {
   const row2 = result.sieves?.find(row => row.size === 2);
   field.value = row2?.passing != null ? row2.passing.toFixed(2) : '';
 }''',
-sync two mm ratio and ms1'
+'sync two mm ratio and ms1'
 )
 
 replace_once(
