@@ -33,3 +33,5 @@ jobs:
           git diff --cached --check
           git commit -m "Add selectable compaction test methods"
           git push
+
+# temporary one-time migration; remove after success
