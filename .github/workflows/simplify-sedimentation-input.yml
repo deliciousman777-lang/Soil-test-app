@@ -1,0 +1,33 @@
+name: Simplify sedimentation input
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/simplify-sedimentation-input.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply sedimentation simplification
+        run: python .github/scripts/simplify_sedimentation_input.py
+      - name: Check JavaScript syntax
+        run: |
+          node --check sedimentation.js
+          node --check fine-sieve.js
+          node --check sw.js
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add sedimentation.js sw.js
+          git diff --cached --check
+          git commit -m "Simplify sedimentation analysis input"
+          git push
