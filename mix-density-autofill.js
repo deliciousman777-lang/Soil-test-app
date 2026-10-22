@@ -118,13 +118,13 @@
     status.classList.toggle('error', !!isError);
   }
 
-  function clearAutoFields(){
+  function clearDensityFields(clearValues = false){
     const f = formEl();
     if (!f) return;
     ['moldMass','moldSoilMass'].forEach(name => {
       const input = f.elements[name];
       if (!input) return;
-      if (input.dataset.originalDensityAuto === '1') input.value = '';
+      if (clearValues || input.dataset.originalDensityAuto === '1') input.value = '';
       delete input.dataset.originalDensityAuto;
     });
     delete f.dataset.originalDensitySource;
@@ -141,20 +141,21 @@
     if (!f) return;
     const target = clean(f.elements.specimenType?.value);
 
-    if (!TARGETS[target]) {
-      clearAutoFields();
-      setStatus('一軸圧縮試験は配合試験用モールドの質量から湿潤密度を計算します。');
-      dispatchRecalc();
-      return;
-    }
-
     // 訂正画面では保存済みの配合試験値を優先し、自動で上書きしない。
     if (currentMixTest()) {
       setStatus('訂正中のため、保存済みの湿潤密度データを保持しています。');
       return;
     }
 
-    clearAutoFields();
+    // 新規入力で試験種別・試料を変えた場合、別条件の密度値を持ち越さない。
+    clearDensityFields(true);
+
+    if (!TARGETS[target]) {
+      setStatus('一軸圧縮試験は配合試験用モールドの質量から湿潤密度を計算します。');
+      dispatchRecalc();
+      return;
+    }
+
     const source = findSource(target);
     const label = TARGETS[target].label;
 
