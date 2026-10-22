@@ -21,6 +21,22 @@
     'ハードキープP-310',
     'ハードキープLD',
   ];
+  const DEFAULT_CEMENT_DETAILS = {
+    'ジオセット200':'汎用（特殊土用）・一般軟弱土',
+    'ジオセット225':'高有機質土用',
+    'ジオセット263':'PTFE処理防塵型',
+    'ユースタビラー10':'一般軟弱土用',
+    'ユースタビラー60':'特殊土用（一般・高有機質土）',
+    'ユースタビラースーパー6':'発塵抑制型',
+    'タフロック3E型':'汎用・一般軟弱土',
+    'タフロックエース':'発塵抑制型・浅層／路床改良',
+    '日鉄アースタイトR100':'特殊土用（汎用）',
+    'ソリッドエース#400':'特殊土用（汎用型）',
+    'スーパーソリッドエース#400':'PTFE防塵・特殊土用',
+    'ハードキープP-530':'特殊土用',
+    'ハードキープP-310':'高有機質土用',
+    'ハードキープLD':'発塵抑制型',
+  };
   const SPECIMEN_TYPES = {
     unconfined: { label:'一軸圧縮試験', fixedSoilMass:1500 },
     cone: { label:'コーン指数試験', fixedSoilMass:null },
@@ -132,7 +148,11 @@
     const manual = f.elements.cementManual;
     const catalog = cementCatalog();
     select.innerHTML = '<option value="">選択してください</option>';
-    catalog.forEach(name => select.add(new Option(name, name)));
+    catalog.forEach(name => {
+      const detail = DEFAULT_CEMENT_DETAILS[name];
+      const label = detail ? `${name}｜${detail}` : name;
+      select.add(new Option(label, name));
+    });
     select.add(new Option('その他／新しいセメントを入力', '__manual__'));
 
     if (selectedName && catalog.includes(selectedName)) {
