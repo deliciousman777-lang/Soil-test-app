@@ -3,7 +3,6 @@
   'use strict';
 
   const TYPE = 'mix-design';
-  const MOLD_VOLUME = 196.3;
   const CEMENT_CATALOG_KEY = 'soilnote-cement-catalog-v1';
   const DEFAULT_CEMENT_CATALOG = [
     'ジオセット200',
@@ -38,9 +37,9 @@
     'ハードキープLD':'発塵抑制型',
   };
   const SPECIMEN_TYPES = {
-    unconfined: { label:'一軸圧縮試験', fixedSoilMass:1500 },
-    cone: { label:'コーン指数試験', fixedSoilMass:null },
-    cbr: { label:'CBR試験', fixedSoilMass:null },
+    unconfined: { label:'一軸圧縮試験', moldVolume:196.3, fixedSoilMass:1500 },
+    cone: { label:'コーン指数試験', moldVolume:1000, fixedSoilMass:2500 },
+    cbr: { label:'CBR試験', moldVolume:2209, fixedSoilMass:18000 },
   };
   const PREPARATION_METHODS = {
     'jcas-l01':'JCAS L-01（セメント協会仕様）',
@@ -57,6 +56,7 @@
   const esc = value => typeof escapeHtml === 'function'
     ? escapeHtml(value)
     : String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+  const formatVolume = value => Number.isInteger(Number(value)) ? Number(value).toFixed(0) : Number(value).toFixed(1);
 
   function formEl(){ return document.getElementById('mixDesignForm'); }
   function dialogEl(){ return document.getElementById('mixDesignDialog'); }
@@ -194,21 +194,21 @@
     return f?.elements.specimenType.value || 'unconfined';
   }
 
+  function specimenDefinition(){
+    return SPECIMEN_TYPES[specimenType()] || SPECIMEN_TYPES.unconfined;
+  }
+
   function applySpecimenType(){
     const f = formEl();
     if (!f) return;
-    const def = SPECIMEN_TYPES[specimenType()] || SPECIMEN_TYPES.unconfined;
+    const def = specimenDefinition();
     const soilMass = f.elements.batchSoilMass;
     const note = document.getElementById('mixSoilMassNote');
-    if (def.fixedSoilMass != null) {
-      soilMass.value = String(def.fixedSoilMass);
-      soilMass.readOnly = true;
-      if (note) note.textContent = '一軸圧縮試験は 1500 g 固定';
-    } else {
-      if (soilMass.readOnly || Number(soilMass.value) === 1500) soilMass.value = '';
-      soilMass.readOnly = false;
-      if (note) note.textContent = `${def.label}は使用する土量を入力`;
-    }
+    soilMass.value = String(def.fixedSoilMass);
+    soilMass.readOnly = true;
+    if (note) note.textContent = `${def.label}は ${def.fixedSoilMass.toLocaleString('ja-JP')} g 固定`;
+    setText('mixMoldVolume', `${formatVolume(def.moldVolume)} cc`);
+    setText('mixMoldVolumeHelp', `${def.label}：モールド体積 ${formatVolume(def.moldVolume)} cc で自動計算`);
   }
 
   function dateOnly(value){
@@ -261,6 +261,8 @@
   function calculations(){
     const f = formEl();
     if (!f) return null;
+    const def = specimenDefinition();
+    const moldVolume = def.moldVolume;
 
     const naturalRows = [1,2,3].map(readNaturalMeasurement);
     const naturalWaterMeasurements = naturalRows
@@ -274,7 +276,7 @@
     const moldSoilMass = num(f.elements.moldSoilMass.value);
     const batchSoilMass = num(f.elements.batchSoilMass.value);
     const soilMass = moldMass !== null && moldSoilMass !== null ? moldSoilMass - moldMass : null;
-    const wetDensity = soilMass !== null && soilMass > 0 ? soilMass / MOLD_VOLUME : null;
+    const wetDensity = soilMass !== null && soilMass > 0 ? soilMass / moldVolume : null;
     const batchVolume = wetDensity !== null && batchSoilMass !== null && batchSoilMass > 0 ? batchSoilMass / wetDensity : null;
 
     const additions = [1,2,3].map(i => {
@@ -294,6 +296,7 @@
       naturalRows,
       naturalWaterMeasurements,
       naturalWaterContent,
+      moldVolume,
       moldMass,
       moldSoilMass,
       soilMass,
@@ -331,6 +334,7 @@
         : '—'
     );
 
+    setText('mixMoldVolume', `${formatVolume(r.moldVolume)} cc`);
     setText('mixSoilMass', r.soilMass !== null && r.soilMass > 0 ? `${r.soilMass.toFixed(1)} g` : '—');
     setText('mixWetDensity', r.wetDensity !== null ? `${r.wetDensity.toFixed(3)} g/cm³` : '—');
     setText('mixBatchVolume', r.batchVolume !== null ? `${r.batchVolume.toFixed(1)} cc` : '—');
@@ -377,7 +381,7 @@
       check.textContent = '⚠ モールド＋土質量はモールド質量より大きい値を入力してください。';
       check.classList.add('error');
     } else if (r.wetDensity === null) {
-      check.textContent = `モールド質量とモールド＋土質量を入力すると、${MOLD_VOLUME} ccから湿潤密度を自動計算します。`;
+      check.textContent = `モールド質量とモールド＋土質量を入力すると、${formatVolume(r.moldVolume)} ccから湿潤密度を自動計算します。`;
     } else if (r.batchSoilMass === null || r.batchVolume === null) {
       check.textContent = `湿潤密度 ${r.wetDensity.toFixed(3)} g/cm³ ｜ 使用土量を入力してください。`;
     } else {
@@ -467,22 +471,22 @@
         </section>
 
         <section class="mix-panel">
-          <div class="subsection-head"><div><span class="step-badge">2</span><strong>湿潤密度</strong></div><p>モールド体積 ${MOLD_VOLUME} cc で自動計算します。</p></div>
+          <div class="subsection-head"><div><span class="step-badge">2</span><strong>湿潤密度</strong></div><p id="mixMoldVolumeHelp">一軸圧縮試験：モールド体積 196.3 cc で自動計算</p></div>
           <div class="mix-grid mix-grid-2">
             <label>モールド質量 (g)<input name="moldMass" inputmode="decimal" autocomplete="off"></label>
             <label>モールド＋土質量 (g)<input name="moldSoilMass" inputmode="decimal" autocomplete="off"></label>
           </div>
           <div class="mix-results mix-results-3">
             <div><span>土の質量</span><strong id="mixSoilMass">—</strong></div>
-            <div><span>モールド体積</span><strong>${MOLD_VOLUME.toFixed(1)} cc</strong></div>
+            <div><span>モールド体積</span><strong id="mixMoldVolume">196.3 cc</strong></div>
             <div><span>湿潤密度 ρt</span><strong id="mixWetDensity">—</strong></div>
           </div>
         </section>
 
         <section class="mix-panel">
-          <div class="subsection-head"><div><span class="step-badge">3</span><strong>配合作製量</strong></div><p>一軸は1500g固定。コーン・CBRは使用土量を入力します。</p></div>
+          <div class="subsection-head"><div><span class="step-badge">3</span><strong>配合作製量</strong></div><p>一軸 1500g・コーン 2500g・CBR 18000g に自動切替します。</p></div>
           <div class="mix-grid mix-grid-2">
-            <label>使用土量 (g)<input name="batchSoilMass" inputmode="decimal" autocomplete="off" value="1500"><small id="mixSoilMassNote" class="mix-help">一軸圧縮試験は 1500 g 固定</small></label>
+            <label>使用土量 (g)<input name="batchSoilMass" inputmode="decimal" autocomplete="off" value="1500" readonly><small id="mixSoilMassNote" class="mix-help">一軸圧縮試験は 1,500 g 固定</small></label>
             <div class="mix-result-highlight"><span>配合作製体積</span><strong id="mixBatchVolume">—</strong><small>使用土量 ÷ 湿潤密度</small></div>
           </div>
         </section>
@@ -543,7 +547,6 @@
     syncCementSelect();
     f.elements.specimenType.value = 'unconfined';
     f.elements.preparationMethod.value = 'jcas-l01';
-    f.elements.batchSoilMass.value = '1500';
     f.elements.airCuringDays.value = '';
     f.elements.waterCuringDays.value = '';
     document.getElementById('mixLegacyNaturalWater')?.classList.add('hidden');
@@ -602,7 +605,7 @@
     f.elements.moldMass.value = test.moldMass ?? '';
     f.elements.moldSoilMass.value = test.moldSoilMass ?? '';
     applySpecimenType();
-    f.elements.batchSoilMass.value = test.batchSoilMass ?? (specimenType() === 'unconfined' ? 1500 : '');
+    f.elements.batchSoilMass.value = test.batchSoilMass ?? SPECIMEN_TYPES[f.elements.specimenType.value]?.fixedSoilMass ?? 1500;
     (test.additions || []).slice(0,3).forEach((row, i) => {
       f.elements[`dosage${i + 1}`].value = row.dosage ?? '';
     });
@@ -683,7 +686,7 @@
       },
       preparationMethod: f.elements.preparationMethod.value,
       preparationMethodLabel: PREPARATION_METHODS[f.elements.preparationMethod.value] || f.elements.preparationMethod.value,
-      moldVolume: MOLD_VOLUME,
+      moldVolume: r.moldVolume,
       moldMass: r.moldMass,
       moldSoilMass: r.moldSoilMass,
       soilMass: r.soilMass,
