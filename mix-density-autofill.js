@@ -61,9 +61,8 @@
       if(moldMass===null||moldSoilMass===null||moldSoilMass<=moldMass)return null;
       return {moldMass,moldSoilMass,soilMass:moldSoilMass-moldMass,wetDensity:(moldSoilMass-moldMass)/volume};
     }).filter(Boolean);
-    if(rows.length)return rows.slice(0,3);
+    if(rows.length)return rows.slice(0,1);
 
-    // 旧形式は1点だけ。3点へ勝手に複製せず、その1点だけ引き継ぐ。
     const moldMass=finite(test?.moldMass);
     const moldSoilMass=finite(test?.moldSoilMass);
     if(moldMass!==null&&moldSoilMass!==null&&moldSoilMass>moldMass){
@@ -77,9 +76,7 @@
     if(!def)return null;
     const sourceVolume=finite(test?.moldVolume)??def.volume;
     const rows=measurementRows(test,target);
-    const wetDensity=rows.length
-      ? rows.reduce((s,r)=>s+r.wetDensity,0)/rows.length
-      : finite(test?.wetDensity);
+    const wetDensity=rows.length ? rows[0].wetDensity : finite(test?.wetDensity);
     if(wetDensity===null||wetDensity<=0)return null;
     return {test,rows,wetDensity,sourceVolume,volumeMatches:Math.abs(sourceVolume-def.volume)<0.01,original:isLikelyOriginal(test)};
   }
@@ -90,7 +87,7 @@
     return (p.tests||[])
       .filter(t=>isTargetType(t,target)&&sameSample(t,sample))
       .map(t=>candidateFrom(t,target)).filter(Boolean)
-      .sort((a,b)=>(Number(b.original)-Number(a.original))||(b.rows.length-a.rows.length)||(timeOf(b.test)-timeOf(a.test)))[0]||null;
+      .sort((a,b)=>(Number(b.original)-Number(a.original))||(timeOf(b.test)-timeOf(a.test)))[0]||null;
   }
 
   function ensureStatus(){
@@ -109,25 +106,21 @@
     if(f.elements.moldSoilMass)f.elements.moldSoilMass.value='';
   }
 
-  function applyRows(rows,label,source){
+  function applyRows(rows,label){
+    const row=rows[0];
+    if(!row)return;
+    const text=`✓ 同一試料の原土${label}から湿潤密度 ${row.wetDensity.toFixed(3)} g/cm³ を自動入力しました。`;
     if(window.SoilNoteMixDensity3?.setMeasurements){
-      const count=rows.length;
-      const average=count?rows.reduce((s,r)=>s+r.wetDensity,0)/count:null;
-      const text=count>=3
-        ? `✓ 同一試料の原土${label}から密度3点を自動入力しました。平均 ${average.toFixed(3)} g/cm³`
-        : `原土${label}は旧形式で密度元データが${count}点だけです。${count}点を自動入力しました。残り${3-count}点を入力してください。`;
-      window.SoilNoteMixDensity3.setMeasurements(rows,text);
-      setStatus(text,count<3);
+      window.SoilNoteMixDensity3.setMeasurements([row],text);
+      setStatus(text,false);
       return;
     }
-    // 3点平均モジュール未読込時の互換処理。
     const f=formEl();
-    if(!f||!rows.length)return;
-    const avgM=rows.reduce((s,r)=>s+r.moldMass,0)/rows.length;
-    const avgMS=rows.reduce((s,r)=>s+r.moldSoilMass,0)/rows.length;
-    f.elements.moldMass.value=String(avgM);f.elements.moldSoilMass.value=String(avgMS);
+    if(!f)return;
+    f.elements.moldMass.value=String(row.moldMass);
+    f.elements.moldSoilMass.value=String(row.moldSoilMass);
     f.elements.moldSoilMass.dispatchEvent(new Event('input',{bubbles:true}));
-    setStatus(`原土${label}の密度データを反映しました。`);
+    setStatus(text,false);
   }
 
   function applyFromOriginal(){
@@ -135,7 +128,7 @@
     const target=clean(f.elements.specimenType?.value);
 
     if(currentMixTest()){
-      setStatus('訂正中のため、保存済みの密度3点データを保持しています。');
+      setStatus('訂正中のため、保存済みの湿潤密度データを保持しています。');
       return;
     }
 
@@ -147,7 +140,7 @@
 
     const source=findSource(target),label=TARGETS[target].label;
     if(!source){
-      setStatus(`同一試料の原土${label}データが見つかりません。密度3点を入力してください。`);
+      setStatus(`同一試料の原土${label}データが見つかりません。密度を1点入力してください。`);
       return;
     }
     if(!source.volumeMatches){
@@ -155,10 +148,10 @@
       return;
     }
     if(!source.rows.length){
-      setStatus(`原土${label}に湿潤密度 ${source.wetDensity.toFixed(3)} g/cm³ はありますが、元の質量データがないため自動入力できません。`,true);
+      setStatus(`原土${label}に湿潤密度 ${source.wetDensity.toFixed(3)} g/cm³ はありますが、元のモールド質量データがないため自動入力できません。`,true);
       return;
     }
-    applyRows(source.rows,label,source);
+    applyRows(source.rows,label);
   }
 
   function bind(){
@@ -169,7 +162,10 @@
     f.addEventListener('input',event=>{
       if(!event.isTrusted)return;
       if(/^density(MoldMass|MoldSoilMass)[123]$/.test(event.target?.name||'')){
-        setStatus('原土データからの自動入力後に手動変更しました。現在の3点入力値を使用します。');
+        const target=clean(f.elements.specimenType?.value);
+        setStatus(TARGETS[target]
+          ? '原土データからの自動入力後に手動変更しました。現在の1点入力値を使用します。'
+          : '現在の3点入力値を使用します。');
       }
     });
     document.getElementById('addMixDesignBtn')?.addEventListener('click',()=>setTimeout(applyFromOriginal,0));
