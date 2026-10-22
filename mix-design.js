@@ -5,6 +5,22 @@
   const TYPE = 'mix-design';
   const MOLD_VOLUME = 196.3;
   const CEMENT_CATALOG_KEY = 'soilnote-cement-catalog-v1';
+  const DEFAULT_CEMENT_CATALOG = [
+    'ジオセット200',
+    'ジオセット225',
+    'ジオセット263',
+    'ユースタビラー10',
+    'ユースタビラー60',
+    'ユースタビラースーパー6',
+    'タフロック3E型',
+    'タフロックエース',
+    '日鉄アースタイトR100',
+    'ソリッドエース#400',
+    'スーパーソリッドエース#400',
+    'ハードキープP-530',
+    'ハードキープP-310',
+    'ハードキープLD',
+  ];
   const SPECIMEN_TYPES = {
     unconfined: { label:'一軸圧縮試験', fixedSoilMass:1500 },
     cone: { label:'コーン指数試験', fixedSoilMass:null },
@@ -60,18 +76,21 @@
   }
 
   function cementCatalog(){
-    const all = [...loadCementCatalog(), ...catalogFromSavedTests()];
-    const unique = [];
-    all.forEach(name => {
+    const custom = [...loadCementCatalog(), ...catalogFromSavedTests()]
+      .map(name => String(name || '').trim())
+      .filter(Boolean)
+      .sort((a,b) => a.localeCompare(b, 'ja-JP'));
+    const unique = [...DEFAULT_CEMENT_CATALOG];
+    custom.forEach(name => {
       if (!unique.some(x => x.toLocaleLowerCase('ja-JP') === name.toLocaleLowerCase('ja-JP'))) unique.push(name);
     });
-    return unique.sort((a,b) => a.localeCompare(b, 'ja-JP'));
+    return unique;
   }
 
   function rememberCement(name){
     const clean = String(name || '').trim();
     if (!clean) return;
-    saveCementCatalog([...cementCatalog(), clean]);
+    saveCementCatalog([...loadCementCatalog(), clean]);
   }
 
   function sampleOptions(){
