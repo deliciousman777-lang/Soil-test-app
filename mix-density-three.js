@@ -1,8 +1,8 @@
-// 配合試験：湿潤密度を3点測定の平均で扱う
+// 配合試験：一軸は湿潤密度3点平均、コーン・CBRは1点で扱う
 (function(){
   'use strict';
 
-  const COUNT = 3;
+  const MAX_COUNT = 3;
 
   const num = value => {
     const s = String(value ?? '').trim();
@@ -14,9 +14,11 @@
   function formEl(){ return document.getElementById('mixDesignForm'); }
   function dialogEl(){ return document.getElementById('mixDesignDialog'); }
 
+  function specimenType(){ return formEl()?.elements.specimenType?.value || 'unconfined'; }
+  function requiredCount(){ return specimenType() === 'unconfined' ? 3 : 1; }
+
   function moldVolume(){
-    const f = formEl();
-    const type = f?.elements.specimenType?.value || 'unconfined';
+    const type = specimenType();
     if (type === 'cone') return 1000;
     if (type === 'cbr') return 2209;
     return 196.3;
@@ -68,46 +70,70 @@
 
   function setText(id, text){ const el=document.getElementById(id); if(el)el.textContent=text; }
 
+  function syncRowVisibility(){
+    const needed = requiredCount();
+    [1,2,3].forEach(i=>{
+      const row = document.querySelector(`.mix-density-row[data-density-row="${i}"]`);
+      if (row) row.classList.toggle('hidden', i > needed);
+    });
+    const head = document.querySelector('.mix-density-three-head');
+    if (head) head.classList.remove('hidden');
+    const averageLabel = document.querySelector('.mix-density-average span');
+    if (averageLabel) averageLabel.textContent = needed === 3 ? '3点平均' : '湿潤密度';
+    const soilMassLabel = document.getElementById('mixSoilMass')?.previousElementSibling;
+    if (soilMassLabel) soilMassLabel.textContent = needed === 3 ? '平均土の質量' : '土の質量';
+    const wetLabel = document.getElementById('mixWetDensity')?.previousElementSibling;
+    if (wetLabel) wetLabel.textContent = needed === 3 ? '平均湿潤密度 ρt' : '湿潤密度 ρt';
+  }
+
   function update(){
+    syncRowVisibility();
+    const needed = requiredCount();
     const all = rows();
     all.forEach(row => {
       setText(`mixDensitySoilMass${row.index}`, row.soilMass !== null && row.soilMass > 0 ? `${row.soilMass.toFixed(1)} g` : '—');
       setText(`mixDensityValue${row.index}`, row.wetDensity !== null ? `${row.wetDensity.toFixed(3)} g/cm³` : '—');
     });
 
-    const valid = all.filter(row => row.status === 'valid');
+    const activeRows = all.slice(0, needed);
+    const valid = activeRows.filter(row => row.status === 'valid');
     const avg = averages(valid);
-    setLegacyAverage(valid.length === COUNT ? avg : null);
+    const ready = valid.length === needed;
+    setLegacyAverage(ready ? avg : null);
 
-    setText('mixDensityAverage', valid.length === COUNT && avg ? `${avg.wetDensity.toFixed(3)} g/cm³` : '—');
-    setText('mixSoilMass', valid.length === COUNT && avg ? `${avg.soilMass.toFixed(1)} g` : '—');
-    setText('mixWetDensity', valid.length === COUNT && avg ? `${avg.wetDensity.toFixed(3)} g/cm³` : '—');
+    setText('mixDensityAverage', ready && avg ? `${avg.wetDensity.toFixed(3)} g/cm³` : '—');
+    setText('mixSoilMass', ready && avg ? `${avg.soilMass.toFixed(1)} g` : '—');
+    setText('mixWetDensity', ready && avg ? `${avg.wetDensity.toFixed(3)} g/cm³` : '—');
 
     const status = document.getElementById('mixDensityThreeCheck');
     if (status) {
       status.classList.remove('error');
-      const bad = all.find(row => row.status === 'incomplete' || row.status === 'invalid');
+      const bad = activeRows.find(row => row.status === 'incomplete' || row.status === 'invalid');
       if (bad) {
         status.textContent = bad.status === 'incomplete'
           ? `⚠ ${bad.index}点目の質量が入力途中です。`
           : `⚠ ${bad.index}点目は「モールド＋土質量」がモールド質量より大きくなるよう確認してください。`;
         status.classList.add('error');
-      } else if (valid.length < COUNT) {
-        status.textContent = `湿潤密度は3点平均です。残り ${COUNT-valid.length} 点を入力してください。`;
+      } else if (valid.length < needed) {
+        status.textContent = needed === 3
+          ? `一軸の湿潤密度は3点平均です。残り ${needed-valid.length} 点を入力してください。`
+          : 'コーン・CBRの湿潤密度は1点です。モールド質量とモールド＋土質量を入力してください。';
       } else {
-        status.textContent = `3点平均 ρt = ${avg.wetDensity.toFixed(3)} g/cm³`;
+        status.textContent = needed === 3
+          ? `3点平均 ρt = ${avg.wetDensity.toFixed(3)} g/cm³`
+          : `湿潤密度 ρt = ${avg.wetDensity.toFixed(3)} g/cm³`;
       }
     }
 
-    // 既存の配合試験計算を平均密度で再計算させる。
+    // 既存の配合試験計算を採用密度で再計算させる。
     const legacy = formEl()?.elements.moldSoilMass;
     if (legacy) legacy.dispatchEvent(new Event('input',{bubbles:true}));
-    return { rows:all, validRows:valid, average:avg };
+    return { rows:all, activeRows, validRows:valid, average:avg, requiredCount:needed };
   }
 
   function makeRow(index){
     return `
-      <div class="mix-density-row">
+      <div class="mix-density-row" data-density-row="${index}">
         <strong>${index}</strong>
         <input name="densityMoldMass${index}" inputmode="decimal" autocomplete="off" placeholder="g" aria-label="モールド質量 ${index}">
         <input name="densityMoldSoilMass${index}" inputmode="decimal" autocomplete="off" placeholder="g" aria-label="モールド＋土質量 ${index}">
@@ -136,13 +162,8 @@
       </div>
       ${makeRow(1)}${makeRow(2)}${makeRow(3)}
       <div class="mix-density-average"><span>3点平均</span><strong id="mixDensityAverage">—</strong></div>
-      <div id="mixDensityThreeCheck" class="mass-check">湿潤密度は3点平均です。3点すべて入力してください。</div>`;
+      <div id="mixDensityThreeCheck" class="mass-check">一軸は3点平均、コーン・CBRは1点で計算します。</div>`;
     legacyGrid.insertAdjacentElement('beforebegin', block);
-
-    const soilMassLabel = document.getElementById('mixSoilMass')?.previousElementSibling;
-    if (soilMassLabel) soilMassLabel.textContent = '平均土の質量';
-    const wetLabel = document.getElementById('mixWetDensity')?.previousElementSibling;
-    if (wetLabel) wetLabel.textContent = '平均湿潤密度 ρt';
 
     if (!document.getElementById('mixDensityThreeStyle')) {
       const style=document.createElement('style');
@@ -157,15 +178,23 @@
       rowInput(i,'MoldMass')?.addEventListener('input', update);
       rowInput(i,'MoldSoilMass')?.addEventListener('input', update);
     });
-    f.elements.specimenType?.addEventListener('change',()=>setTimeout(update,0));
+    f.elements.specimenType?.addEventListener('change',()=>{
+      const needed=requiredCount();
+      if(needed===1){
+        [2,3].forEach(i=>{rowInput(i,'MoldMass').value='';rowInput(i,'MoldSoilMass').value='';});
+      }
+      setTimeout(update,0);
+    });
 
-    // 保存前に3点必須を確認し、保存後に3点の元データも試験データへ残す。
+    // 保存前に必要点数を確認し、採用した元データも試験データへ残す。
     f.addEventListener('submit', event => {
       const result=update();
-      if (result.validRows.length !== COUNT) {
+      if (result.validRows.length !== result.requiredCount) {
         event.preventDefault();
         event.stopImmediatePropagation();
-        alert('湿潤密度は3点平均です。モールド質量とモールド＋土質量を3点すべて入力してください。');
+        alert(result.requiredCount===3
+          ? '一軸の湿潤密度は3点平均です。モールド質量とモールド＋土質量を3点すべて入力してください。'
+          : 'コーン・CBRの湿潤密度は1点です。モールド質量とモールド＋土質量を入力してください。');
         return;
       }
       const p = typeof currentProject === 'function' ? currentProject() : null;
@@ -179,6 +208,7 @@
         wetDensity:row.wetDensity,
       }));
       const average = {...result.average};
+      const count = result.requiredCount;
       setTimeout(()=>{
         const project = (state?.data?.projects || []).find(x=>String(x.id)===String(projectId));
         if (!project || dialogEl()?.open) return;
@@ -186,7 +216,7 @@
         if (!test) test = [...(project.tests||[])].reverse().find(t=>t.type==='mix-design'&&!beforeIds.has(t.id));
         if (!test) return;
         test.densityMeasurements = savedRows;
-        test.densityMeasurementCount = COUNT;
+        test.densityMeasurementCount = count;
         test.moldMass = average.moldMass;
         test.moldSoilMass = average.moldSoilMass;
         test.soilMass = average.soilMass;
@@ -211,14 +241,16 @@
 
     window.SoilNoteMixDensity3 = {
       update,
-      getMeasurements(){ return rows().filter(r=>r.status==='valid'); },
+      getRequiredCount: requiredCount,
+      getMeasurements(){ return rows().slice(0,requiredCount()).filter(r=>r.status==='valid'); },
       clear(){
         [1,2,3].forEach(i=>{rowInput(i,'MoldMass').value='';rowInput(i,'MoldSoilMass').value='';});
         update();
       },
       setMeasurements(items, sourceText=''){
         [1,2,3].forEach(i=>{rowInput(i,'MoldMass').value='';rowInput(i,'MoldSoilMass').value='';});
-        (Array.isArray(items)?items:[]).slice(0,3).forEach((item,idx)=>{
+        const needed=requiredCount();
+        (Array.isArray(items)?items:[]).slice(0,needed).forEach((item,idx)=>{
           const i=idx+1;
           rowInput(i,'MoldMass').value=item?.moldMass ?? '';
           rowInput(i,'MoldSoilMass').value=item?.moldSoilMass ?? '';
@@ -244,7 +276,8 @@
     const test=id?(p?.tests||[]).find(t=>t.id===id&&t.type==='mix-design'):null;
     [1,2,3].forEach(i=>{rowInput(i,'MoldMass').value='';rowInput(i,'MoldSoilMass').value='';});
     if(test){
-      const saved=Array.isArray(test.densityMeasurements)?test.densityMeasurements.slice(0,3):[];
+      const needed=requiredCount();
+      const saved=Array.isArray(test.densityMeasurements)?test.densityMeasurements.slice(0,needed):[];
       if(saved.length){
         saved.forEach((row,idx)=>{
           const i=idx+1;
