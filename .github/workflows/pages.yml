@@ -26,7 +26,7 @@ jobs:
 
       - name: Check JavaScript syntax
         run: |
-          for f in app.js grain-delete-early.js sedimentation.js hydrometer-input.js sedimentation-cm-fix.js sedimentation-workbench.js sedimentation-workbench-focus-fix.js sedimentation-alarm.js sedimentation-auto-open.js grain-delete.js grain-charts.js fine-sieve.js dvalue-spline.js particle-density.js particle-density-common-temp.js pycnometer-master.js report-sheet.js report-ternary-fix.js atterberg-limits.js cone-index.js compaction.js mix-design.js cement-catalog.js report-extra-tests.js sample-manager.js atterberg-np.js review-all-tests.js draft-save.js grain-wash-containers.js test-date.js numeric-input.js supabase-config.js cloud-share.js edit-lock.js project-test-plan.js input-usability.js project-completion.js project-workflow.js; do
+          for f in app.js grain-delete-early.js sedimentation.js hydrometer-input.js sedimentation-cm-fix.js sedimentation-workbench.js sedimentation-workbench-focus-fix.js sedimentation-alarm.js sedimentation-auto-open.js grain-delete.js grain-charts.js fine-sieve.js dvalue-spline.js particle-density.js particle-density-common-temp.js pycnometer-master.js report-sheet.js report-ternary-fix.js atterberg-limits.js cone-index.js compaction.js mix-design.js report-extra-tests.js sample-manager.js atterberg-np.js review-all-tests.js draft-save.js grain-wash-containers.js test-date.js numeric-input.js supabase-config.js cloud-share.js edit-lock.js project-test-plan.js input-usability.js project-completion.js project-workflow.js; do
             node --check "$f"
           done
 
@@ -55,7 +55,6 @@ jobs:
               'cone-index.js',
               'compaction.js',
               'mix-design.js',
-              'cement-catalog.js',
               'report-extra-tests.js',
               'sample-manager.js',
               'atterberg-np.js',
@@ -131,7 +130,6 @@ jobs:
           assert 'particle-density-common-temp.js' in html, 'Particle density common temperature script missing'
           assert 'compaction.js' in html, 'Compaction script missing'
           assert 'mix-design.js' in html, 'Mix design script missing'
-          assert 'cement-catalog.js' in html, 'Cement catalog script missing'
           assert 'project-completion.js' in html, 'Project completion script missing'
           assert 'project-workflow.js' in html, 'Project workflow script missing'
           assert 'cloud-sync.js' not in html, 'Old cloud sync script must not be published'
