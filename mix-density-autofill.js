@@ -1,4 +1,4 @@
-// 配合試験：同一試料の原土試験から湿潤密度を自動入力
+// 配合試験：同一試料の原土試験から湿潤密度の元データを自動入力
 (function(){
   'use strict';
 
@@ -12,201 +12,169 @@
   const finite = value => Number.isFinite(Number(value)) ? Number(value) : null;
 
   function formEl(){ return document.getElementById('mixDesignForm'); }
-  function project(){
-    try { return currentProject?.() || null; } catch { return null; }
-  }
+  function project(){ try{return currentProject?.()||null;}catch{return null;} }
 
   function currentMixTest(){
-    const p = project();
-    if (!p || !state?.editingTestId) return null;
-    return (p.tests || []).find(test => test.id === state.editingTestId && test.type === 'mix-design') || null;
+    const p=project();
+    if(!p||!state?.editingTestId)return null;
+    return (p.tests||[]).find(t=>t.id===state.editingTestId&&t.type==='mix-design')||null;
   }
 
   function selectedSample(){
-    const f = formEl();
-    if (!f?.elements.sample) return { id:'', name:'' };
-    const option = f.elements.sample.selectedOptions?.[0];
-    return {
-      id: clean(option?.dataset?.sampleId),
-      name: clean(f.elements.sample.value),
-    };
+    const f=formEl();
+    const option=f?.elements.sample?.selectedOptions?.[0];
+    return {id:clean(option?.dataset?.sampleId),name:clean(f?.elements.sample?.value)};
   }
 
-  function sameSample(test, sample){
-    const testId = clean(test?.sampleId);
-    if (sample.id && testId) return sample.id === testId;
-    return !!sample.name && sameText(test?.sample, sample.name);
+  function sameSample(test,sample){
+    const id=clean(test?.sampleId);
+    if(sample.id&&id)return sample.id===id;
+    return !!sample.name&&sameText(test?.sample,sample.name);
   }
 
-  function isTargetType(test, target){
-    const type = clean(test?.type).toLocaleLowerCase('ja-JP');
-    if (!type || type === 'mix-design') return false;
-    if (target === 'cone') return type === 'cone-index' || type.includes('cone');
-    if (target === 'cbr') return type.includes('cbr');
+  function isTargetType(test,target){
+    const type=clean(test?.type).toLocaleLowerCase('ja-JP');
+    if(!type||type==='mix-design')return false;
+    if(target==='cone')return type==='cone-index'||type.includes('cone');
+    if(target==='cbr')return type.includes('cbr');
     return false;
   }
 
   function isLikelyOriginal(test){
-    return !clean(test?.cementName)
-      && !clean(test?.stabilizerName)
-      && !clean(test?.binderName)
-      && test?.dosage == null
-      && !Array.isArray(test?.additions);
+    return !clean(test?.cementName)&&!clean(test?.stabilizerName)&&!clean(test?.binderName)
+      && test?.dosage==null&&!Array.isArray(test?.additions);
   }
 
   function timeOf(test){
-    const t = new Date(test?.updatedAt || test?.createdAt || 0).getTime();
-    return Number.isFinite(t) ? t : 0;
+    const t=new Date(test?.updatedAt||test?.createdAt||0).getTime();
+    return Number.isFinite(t)?t:0;
   }
 
-  function candidateFrom(test, target){
-    const def = TARGETS[target];
-    if (!def) return null;
-    const moldMass = finite(test?.moldMass);
-    const moldSoilMass = finite(test?.moldSoilMass);
-    const sourceVolume = finite(test?.moldVolume) ?? def.volume;
-    const storedDensity = finite(test?.wetDensity);
-    const massDensity = moldMass !== null && moldSoilMass !== null && moldSoilMass > moldMass && sourceVolume > 0
-      ? (moldSoilMass - moldMass) / sourceVolume
-      : null;
-    const wetDensity = storedDensity ?? massDensity;
-    if (wetDensity === null || wetDensity <= 0) return null;
+  function measurementRows(test,target){
+    const def=TARGETS[target];
+    if(!def)return [];
+    const volume=finite(test?.moldVolume)??def.volume;
+    const source=Array.isArray(test?.densityMeasurements)?test.densityMeasurements:[];
+    const rows=source.map(row=>{
+      const moldMass=finite(row?.moldMass);
+      const moldSoilMass=finite(row?.moldSoilMass);
+      if(moldMass===null||moldSoilMass===null||moldSoilMass<=moldMass)return null;
+      return {moldMass,moldSoilMass,soilMass:moldSoilMass-moldMass,wetDensity:(moldSoilMass-moldMass)/volume};
+    }).filter(Boolean);
+    if(rows.length)return rows.slice(0,3);
 
-    const volumeMatches = Math.abs(sourceVolume - def.volume) < 0.01;
-    return {
-      test,
-      moldMass,
-      moldSoilMass,
-      sourceVolume,
-      wetDensity,
-      canCopyMasses: volumeMatches && moldMass !== null && moldSoilMass !== null && moldSoilMass > moldMass,
-      original: isLikelyOriginal(test),
-    };
+    // 旧形式は1点だけ。3点へ勝手に複製せず、その1点だけ引き継ぐ。
+    const moldMass=finite(test?.moldMass);
+    const moldSoilMass=finite(test?.moldSoilMass);
+    if(moldMass!==null&&moldSoilMass!==null&&moldSoilMass>moldMass){
+      return [{moldMass,moldSoilMass,soilMass:moldSoilMass-moldMass,wetDensity:(moldSoilMass-moldMass)/volume}];
+    }
+    return [];
+  }
+
+  function candidateFrom(test,target){
+    const def=TARGETS[target];
+    if(!def)return null;
+    const sourceVolume=finite(test?.moldVolume)??def.volume;
+    const rows=measurementRows(test,target);
+    const wetDensity=rows.length
+      ? rows.reduce((s,r)=>s+r.wetDensity,0)/rows.length
+      : finite(test?.wetDensity);
+    if(wetDensity===null||wetDensity<=0)return null;
+    return {test,rows,wetDensity,sourceVolume,volumeMatches:Math.abs(sourceVolume-def.volume)<0.01,original:isLikelyOriginal(test)};
   }
 
   function findSource(target){
-    const p = project();
-    const sample = selectedSample();
-    if (!p || !sample.name || !TARGETS[target]) return null;
-    return (p.tests || [])
-      .filter(test => isTargetType(test, target) && sameSample(test, sample))
-      .map(test => candidateFrom(test, target))
-      .filter(Boolean)
-      .sort((a,b) => (Number(b.original) - Number(a.original)) || (timeOf(b.test) - timeOf(a.test)))[0] || null;
+    const p=project(),sample=selectedSample();
+    if(!p||!sample.name||!TARGETS[target])return null;
+    return (p.tests||[])
+      .filter(t=>isTargetType(t,target)&&sameSample(t,sample))
+      .map(t=>candidateFrom(t,target)).filter(Boolean)
+      .sort((a,b)=>(Number(b.original)-Number(a.original))||(b.rows.length-a.rows.length)||(timeOf(b.test)-timeOf(a.test)))[0]||null;
   }
 
   function ensureStatus(){
-    const f = formEl();
-    if (!f) return null;
-    let status = document.getElementById('mixOriginalDensityStatus');
-    if (status) return status;
-    const density = document.getElementById('mixWetDensity');
-    const section = density?.closest('.mix-panel');
-    if (!section) return null;
-    status = document.createElement('div');
-    status.id = 'mixOriginalDensityStatus';
-    status.className = 'mass-check';
-    status.style.marginTop = '10px';
-    section.appendChild(status);
-    return status;
+    let el=document.getElementById('mixOriginalDensityStatus');
+    if(el)return el;
+    const section=document.getElementById('mixWetDensity')?.closest('.mix-panel');
+    if(!section)return null;
+    el=document.createElement('div');el.id='mixOriginalDensityStatus';el.className='mass-check';el.style.marginTop='10px';section.appendChild(el);return el;
+  }
+  function setStatus(text,error=false){const el=ensureStatus();if(!el)return;el.textContent=text;el.classList.toggle('error',!!error);}
+
+  function clearInputs(){
+    if(window.SoilNoteMixDensity3?.clear){window.SoilNoteMixDensity3.clear();return;}
+    const f=formEl();if(!f)return;
+    if(f.elements.moldMass)f.elements.moldMass.value='';
+    if(f.elements.moldSoilMass)f.elements.moldSoilMass.value='';
   }
 
-  function setStatus(text, isError = false){
-    const status = ensureStatus();
-    if (!status) return;
-    status.textContent = text;
-    status.classList.toggle('error', !!isError);
-  }
-
-  function clearDensityFields(clearValues = false){
-    const f = formEl();
-    if (!f) return;
-    ['moldMass','moldSoilMass'].forEach(name => {
-      const input = f.elements[name];
-      if (!input) return;
-      if (clearValues || input.dataset.originalDensityAuto === '1') input.value = '';
-      delete input.dataset.originalDensityAuto;
-    });
-    delete f.dataset.originalDensitySource;
-  }
-
-  function dispatchRecalc(){
-    const f = formEl();
-    const input = f?.elements.moldSoilMass;
-    if (input) input.dispatchEvent(new Event('input', { bubbles:true }));
+  function applyRows(rows,label,source){
+    if(window.SoilNoteMixDensity3?.setMeasurements){
+      const count=rows.length;
+      const average=count?rows.reduce((s,r)=>s+r.wetDensity,0)/count:null;
+      const text=count>=3
+        ? `✓ 同一試料の原土${label}から密度3点を自動入力しました。平均 ${average.toFixed(3)} g/cm³`
+        : `原土${label}は旧形式で密度元データが${count}点だけです。${count}点を自動入力しました。残り${3-count}点を入力してください。`;
+      window.SoilNoteMixDensity3.setMeasurements(rows,text);
+      setStatus(text,count<3);
+      return;
+    }
+    // 3点平均モジュール未読込時の互換処理。
+    const f=formEl();
+    if(!f||!rows.length)return;
+    const avgM=rows.reduce((s,r)=>s+r.moldMass,0)/rows.length;
+    const avgMS=rows.reduce((s,r)=>s+r.moldSoilMass,0)/rows.length;
+    f.elements.moldMass.value=String(avgM);f.elements.moldSoilMass.value=String(avgMS);
+    f.elements.moldSoilMass.dispatchEvent(new Event('input',{bubbles:true}));
+    setStatus(`原土${label}の密度データを反映しました。`);
   }
 
   function applyFromOriginal(){
-    const f = formEl();
-    if (!f) return;
-    const target = clean(f.elements.specimenType?.value);
+    const f=formEl();if(!f)return;
+    const target=clean(f.elements.specimenType?.value);
 
-    // 訂正画面では保存済みの配合試験値を優先し、自動で上書きしない。
-    if (currentMixTest()) {
-      setStatus('訂正中のため、保存済みの湿潤密度データを保持しています。');
+    if(currentMixTest()){
+      setStatus('訂正中のため、保存済みの密度3点データを保持しています。');
       return;
     }
 
-    // 新規入力で試験種別・試料を変えた場合、別条件の密度値を持ち越さない。
-    clearDensityFields(true);
-
-    if (!TARGETS[target]) {
-      setStatus('一軸圧縮試験は配合試験用モールドの質量から湿潤密度を計算します。');
-      dispatchRecalc();
+    clearInputs();
+    if(!TARGETS[target]){
+      setStatus('一軸圧縮試験はモールド質量とモールド＋土質量を3点入力し、その平均密度を使用します。');
       return;
     }
 
-    const source = findSource(target);
-    const label = TARGETS[target].label;
-
-    if (!source) {
-      setStatus(`同一試料の原土${label}データが見つからないため、モールド質量を入力してください。`);
-      dispatchRecalc();
+    const source=findSource(target),label=TARGETS[target].label;
+    if(!source){
+      setStatus(`同一試料の原土${label}データが見つかりません。密度3点を入力してください。`);
       return;
     }
-
-    if (!source.canCopyMasses) {
-      setStatus(`原土${label}に湿潤密度 ${source.wetDensity.toFixed(3)} g/cm³ はありますが、元のモールド質量データがないため自動入力できません。`, true);
-      dispatchRecalc();
+    if(!source.volumeMatches){
+      setStatus(`原土${label}のモールド体積が現在の条件と異なるため、自動入力しません。`,true);
       return;
     }
-
-    f.elements.moldMass.value = String(source.moldMass);
-    f.elements.moldSoilMass.value = String(source.moldSoilMass);
-    f.elements.moldMass.dataset.originalDensityAuto = '1';
-    f.elements.moldSoilMass.dataset.originalDensityAuto = '1';
-    f.dataset.originalDensitySource = clean(source.test?.id);
-    setStatus(`✓ 同一試料の原土${label}から湿潤密度 ${source.wetDensity.toFixed(3)} g/cm³ を自動入力しました。`);
-    dispatchRecalc();
+    if(!source.rows.length){
+      setStatus(`原土${label}に湿潤密度 ${source.wetDensity.toFixed(3)} g/cm³ はありますが、元の質量データがないため自動入力できません。`,true);
+      return;
+    }
+    applyRows(source.rows,label,source);
   }
 
   function bind(){
-    const f = formEl();
-    if (!f || f.dataset.originalDensityBound === '1') return;
-    f.dataset.originalDensityBound = '1';
-    ensureStatus();
-
-    f.elements.specimenType?.addEventListener('change', () => setTimeout(applyFromOriginal, 0));
-    f.elements.sample?.addEventListener('change', () => setTimeout(applyFromOriginal, 0));
-
-    ['moldMass','moldSoilMass'].forEach(name => {
-      f.elements[name]?.addEventListener('input', event => {
-        if (!event.isTrusted) return;
-        if (event.currentTarget.dataset.originalDensityAuto !== '1' && !f.dataset.originalDensitySource) return;
-        delete f.elements.moldMass?.dataset.originalDensityAuto;
-        delete f.elements.moldSoilMass?.dataset.originalDensityAuto;
-        delete f.dataset.originalDensitySource;
-        setStatus('原土データの自動入力後に手動で変更しました。現在は手入力値を使用しています。');
-      });
+    const f=formEl();if(!f||f.dataset.originalDensityBound==='1')return;
+    f.dataset.originalDensityBound='1';ensureStatus();
+    f.elements.specimenType?.addEventListener('change',()=>setTimeout(applyFromOriginal,0));
+    f.elements.sample?.addEventListener('change',()=>setTimeout(applyFromOriginal,0));
+    f.addEventListener('input',event=>{
+      if(!event.isTrusted)return;
+      if(/^density(MoldMass|MoldSoilMass)[123]$/.test(event.target?.name||'')){
+        setStatus('原土データからの自動入力後に手動変更しました。現在の3点入力値を使用します。');
+      }
     });
-
-    document.getElementById('addMixDesignBtn')?.addEventListener('click', () => setTimeout(applyFromOriginal, 0));
+    document.getElementById('addMixDesignBtn')?.addEventListener('click',()=>setTimeout(applyFromOriginal,0));
   }
 
-  function init(){
-    bind();
-    if (!formEl()) setTimeout(init, 50);
-  }
-
+  function init(){bind();if(!formEl())setTimeout(init,60);}
   init();
 })();
