@@ -187,6 +187,11 @@
   function calculations(){
     const f = formEl();
     if (!f) return null;
+    const naturalWaterContents = [1,2,3].map(i => num(f.elements[`naturalWaterContent${i}`].value));
+    const naturalWaterValues = naturalWaterContents.filter(value => value !== null);
+    const naturalWaterContent = naturalWaterValues.length
+      ? naturalWaterValues.reduce((sum, value) => sum + value, 0) / naturalWaterValues.length
+      : null;
     const moldMass = num(f.elements.moldMass.value);
     const moldSoilMass = num(f.elements.moldSoilMass.value);
     const batchSoilMass = num(f.elements.batchSoilMass.value);
@@ -204,7 +209,7 @@
       ? (airDays || 0) + (waterDays || 0)
       : null;
     const dateDays = dateDiffDays(f.elements.specimenDate.value, f.elements.compressionDate.value);
-    return { moldMass, moldSoilMass, soilMass, wetDensity, batchSoilMass, batchVolume, additions, airDays, waterDays, enteredCuringDays, dateDays };
+    return { naturalWaterContents, naturalWaterValues, naturalWaterContent, moldMass, moldSoilMass, soilMass, wetDensity, batchSoilMass, batchVolume, additions, airDays, waterDays, enteredCuringDays, dateDays };
   }
 
   function setText(id, text){
@@ -215,6 +220,7 @@
   function updatePreview(){
     const r = calculations();
     if (!r) return;
+    setText('mixNaturalWaterAverage', r.naturalWaterContent !== null ? `${r.naturalWaterContent.toFixed(1)} %（${r.naturalWaterValues.length}点平均）` : '—');
     setText('mixSoilMass', r.soilMass !== null && r.soilMass > 0 ? `${r.soilMass.toFixed(1)} g` : '—');
     setText('mixWetDensity', r.wetDensity !== null ? `${r.wetDensity.toFixed(3)} g/cm³` : '—');
     setText('mixBatchVolume', r.batchVolume !== null ? `${r.batchVolume.toFixed(1)} cc` : '—');
@@ -281,7 +287,15 @@
           <div class="subsection-head"><div><span class="step-badge">1</span><strong>基本条件</strong></div><p>供試体作製条件と養生条件を記録します。</p></div>
           <div class="mix-grid mix-grid-3">
             <label>試料名 / No.<select name="sample" class="managed-sample-select" required></select></label>
-            <label>自然含水比 wn (%)<div class="mix-inline"><input name="naturalWaterContent" inputmode="decimal" autocomplete="off"><button type="button" class="ghost" id="mixLoadNaturalWater">含水比から読込</button></div></label>
+            <div class="mix-moisture-block">
+              <span class="mix-field-label">自然含水比 wn (%)</span>
+              <div class="mix-moisture-inputs">
+                <label>①<input name="naturalWaterContent1" inputmode="decimal" autocomplete="off" placeholder="%"></label>
+                <label>②<input name="naturalWaterContent2" inputmode="decimal" autocomplete="off" placeholder="%"></label>
+                <label>③<input name="naturalWaterContent3" inputmode="decimal" autocomplete="off" placeholder="%"></label>
+              </div>
+              <div class="mix-moisture-average"><span>平均</span><strong id="mixNaturalWaterAverage">—</strong></div>
+            </div>
             <label>供試体の試験種別<select name="specimenType"><option value="unconfined">一軸圧縮試験</option><option value="cone">コーン指数試験</option><option value="cbr">CBR試験</option></select></label>
           </div>
           <div class="mix-grid mix-grid-2">
@@ -343,12 +357,12 @@
         .mix-panel{margin-top:14px;padding:14px;border:1px solid var(--line,#dfe7e3);border-radius:16px;background:#fff}
         .mix-grid{display:grid;gap:10px;align-items:end}.mix-grid-3{grid-template-columns:repeat(3,1fr)}.mix-grid-2{grid-template-columns:repeat(2,1fr)}
         .mix-design-dialog select{width:100%;min-height:46px;border:1px solid var(--line,#dfe7e3);border-radius:12px;background:#fff;padding:0 10px;font-size:15px;color:#1f2a24}
-        .mix-inline{display:grid;grid-template-columns:1fr auto;gap:7px;align-items:stretch}.mix-inline .ghost{white-space:nowrap;padding:0 12px}
+        .mix-moisture-block{display:flex;flex-direction:column;gap:6px}.mix-field-label{font-size:12px;font-weight:600;color:#26352d}.mix-moisture-inputs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}.mix-moisture-inputs label{font-size:10px;color:var(--muted,#68766e)}.mix-moisture-inputs input{margin-top:3px}.mix-moisture-average{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 10px;border:1px solid var(--line,#dfe7e3);border-radius:10px;background:#f8fbfa}.mix-moisture-average span{font-size:11px;color:var(--muted,#68766e)}.mix-moisture-average strong{font-size:15px;color:var(--accent-dark,#0b5136)}
         .mix-results{display:grid;gap:9px;margin-top:10px}.mix-results-3{grid-template-columns:repeat(3,1fr)}.mix-results>div,.mix-result-highlight{padding:12px;border:1px solid var(--line,#dfe7e3);border-radius:13px;background:#f8fbfa;text-align:center}
         .mix-results span,.mix-result-highlight span,.mix-result-highlight small{display:block;font-size:11px;color:var(--muted,#68766e)}.mix-results strong,.mix-result-highlight strong{display:block;margin:3px 0;font-size:23px;color:var(--accent-dark,#0b5136)}
         .mix-help{display:block;margin-top:5px;color:var(--muted,#68766e);font-size:10px}.mix-additions{display:grid;gap:9px}.mix-addition-row{display:grid;grid-template-columns:42px 1fr 1fr;gap:10px;align-items:end;padding:11px;border:1px solid var(--line,#dfe7e3);border-radius:14px;background:#f8fbfa}.mix-addition-row>strong{font-size:22px;color:var(--accent-dark,#0b5136);align-self:center;text-align:center}.mix-addition-row>div{min-height:48px;padding:8px 10px;border:1px solid var(--line,#dfe7e3);border-radius:12px;background:#fff;display:flex;flex-direction:column;justify-content:center}.mix-addition-row>div span{font-size:11px;color:var(--muted,#68766e)}.mix-addition-row>div strong{font-size:20px;color:var(--accent-dark,#0b5136)}
-        @media(max-width:760px){.mix-grid-3{grid-template-columns:1fr 1fr}.mix-addition-row{grid-template-columns:36px 1fr 1fr}}
-        @media(max-width:560px){.mix-grid-3,.mix-grid-2{grid-template-columns:1fr}.mix-inline{grid-template-columns:1fr}.mix-results-3{grid-template-columns:1fr 1fr}.mix-addition-row{grid-template-columns:32px 1fr}.mix-addition-row>div{grid-column:2}.mix-design-dialog .subsection-head{align-items:flex-start}}
+        @media(max-width:760px){.mix-grid-3{grid-template-columns:1fr 1fr}.mix-addition-row{grid-template-columns:36px 1fr 1fr}.mix-moisture-block{grid-column:span 2}}
+        @media(max-width:560px){.mix-grid-3,.mix-grid-2{grid-template-columns:1fr}.mix-moisture-block{grid-column:auto}.mix-results-3{grid-template-columns:1fr 1fr}.mix-addition-row{grid-template-columns:32px 1fr}.mix-addition-row>div{grid-column:2}.mix-design-dialog .subsection-head{align-items:flex-start}}
       `;
       document.head.appendChild(style);
     }
@@ -359,7 +373,6 @@
     f.addEventListener('submit', saveTest);
     f.elements.specimenType.addEventListener('change', () => { applySpecimenType(); updatePreview(); });
     f.elements.cementChoice.addEventListener('change', toggleManualCement);
-    dialog.querySelector('#mixLoadNaturalWater').addEventListener('click', loadNaturalWater);
     dialog.querySelector('#mixDesignClose').addEventListener('click', () => dialog.close());
     dialog.querySelector('#mixDesignCancel').addEventListener('click', () => dialog.close());
   }
@@ -403,7 +416,12 @@
     document.getElementById('mixDesignSubmit').textContent = '訂正を保存';
     syncSampleSelect(test.sample || '');
     syncCementSelect(test.cementName || '');
-    f.elements.naturalWaterContent.value = test.naturalWaterContent ?? '';
+    const savedNaturalWaterContents = Array.isArray(test.naturalWaterContents)
+      ? test.naturalWaterContents.slice(0,3)
+      : [test.naturalWaterContent ?? null, null, null];
+    [1,2,3].forEach((i) => {
+      f.elements[`naturalWaterContent${i}`].value = savedNaturalWaterContents[i - 1] ?? '';
+    });
     f.elements.specimenType.value = test.specimenType || 'unconfined';
     f.elements.specimenDate.value = test.specimenDate || '';
     f.elements.compressionDate.value = test.compressionDate || '';
@@ -419,23 +437,6 @@
     dialogEl().showModal();
   }
 
-  function loadNaturalWater(){
-    const p = currentProject?.();
-    const f = formEl();
-    const sample = f?.elements.sample.value.trim();
-    if (!p || !f) return;
-    const candidates = (p.tests || [])
-      .filter(test => test.type === 'moisture' && Number.isFinite(Number(test.moistureAverage)))
-      .sort((a,b) => String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || '')));
-    const chosen = candidates.find(test => sample && String(test.sample || '').trim() === sample) || candidates[0];
-    if (!chosen) {
-      alert('この工事件名に保存済みの含水比試験がありません。');
-      return;
-    }
-    f.elements.naturalWaterContent.value = Number(chosen.moistureAverage).toFixed(1);
-    updatePreview();
-  }
-
   function saveTest(event){
     event.preventDefault();
     const f = formEl();
@@ -446,6 +447,8 @@
     const r = calculations();
 
     if (!sample) { alert('試料を選択してください。'); return; }
+    if (!r.naturalWaterValues.length) { alert('自然含水比を1つ以上入力してください。'); return; }
+    if (r.naturalWaterValues.some(value => value < 0)) { alert('自然含水比は0以上で入力してください。'); return; }
     if (!cementName) { alert('使用セメントを選択または入力してください。'); return; }
     if (r.moldMass === null || r.moldSoilMass === null || r.soilMass === null || r.soilMass <= 0 || r.wetDensity === null) {
       alert('モールド質量とモールド＋土質量を確認してください。'); return;
@@ -466,7 +469,8 @@
     const payload = {
       sample,
       sampleId,
-      naturalWaterContent: num(f.elements.naturalWaterContent.value),
+      naturalWaterContent: r.naturalWaterContent,
+      naturalWaterContents: r.naturalWaterContents,
       cementName,
       specimenType: f.elements.specimenType.value,
       specimenDate: f.elements.specimenDate.value || '',
@@ -511,6 +515,7 @@
   function renderCard(test){
     const def = SPECIMEN_TYPES[test.specimenType] || SPECIMEN_TYPES.unconfined;
     const adds = (test.additions || []).slice(0,3).map(a => Number.isFinite(Number(a.dosage)) ? Number(a.dosage).toFixed(0) : '—').join(' / ');
+    const wn = num(test.naturalWaterContent);
     return `
       <div class="card-title-row">
         <div>
@@ -521,6 +526,7 @@
         <button type="button" class="edit-btn" data-edit-mix-design="${esc(test.id)}">訂正</button>
       </div>
       <div class="fraction-card-row">
+        <div><span>自然含水比 wn</span><strong>${wn !== null ? wn.toFixed(1) : '—'} %</strong></div>
         <div><span>湿潤密度 ρt</span><strong>${num(test.wetDensity)?.toFixed(3) ?? '—'} g/cm³</strong></div>
         <div><span>作製体積</span><strong>${num(test.batchVolume)?.toFixed(1) ?? '—'} cc</strong></div>
         <div><span>添加量 kg/m³</span><strong>${esc(adds)}</strong></div>
