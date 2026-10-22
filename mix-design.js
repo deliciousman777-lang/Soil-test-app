@@ -3,7 +3,7 @@
   'use strict';
 
   const TYPE = 'mix-design';
-  const MOLD_VOLUME = 196.3; // cm3
+  const MOLD_VOLUME = 196.3;
   const CEMENT_CATALOG_KEY = 'soilnote-cement-catalog-v1';
   const SPECIMEN_TYPES = {
     unconfined: { label:'一軸圧縮試験', fixedSoilMass:1500 },
@@ -184,32 +184,89 @@
     return Math.round((b.getTime() - a.getTime()) / 86400000);
   }
 
+  function readNaturalMeasurement(index){
+    const f = formEl();
+    if (!f) return { index, status:'blank' };
+
+    const containerNo = f.elements[`naturalContainerNo${index}`].value.trim();
+    const wetRaw = f.elements[`naturalWetMass${index}`].value.trim();
+    const dryRaw = f.elements[`naturalDryMass${index}`].value.trim();
+    const containerRaw = f.elements[`naturalContainerMass${index}`].value.trim();
+    const any = [containerNo, wetRaw, dryRaw, containerRaw].some(value => value !== '');
+
+    if (!any) return { index, status:'blank' };
+    if (!containerNo || !wetRaw || !dryRaw || !containerRaw) return { index, status:'incomplete' };
+
+    const wetMass = Number(wetRaw);
+    const dryMass = Number(dryRaw);
+    const containerMass = Number(containerRaw);
+    if (![wetMass, dryMass, containerMass].every(Number.isFinite)) return { index, status:'invalid' };
+
+    const waterMass = wetMass - dryMass;
+    const drySoilMass = dryMass - containerMass;
+    if (waterMass < 0 || drySoilMass <= 0) return { index, status:'invalid' };
+
+    return {
+      index,
+      status:'valid',
+      measurement: {
+        containerNo,
+        wetMass,
+        dryMass,
+        containerMass,
+        moisture: (waterMass / drySoilMass) * 100,
+      },
+    };
+  }
+
   function calculations(){
     const f = formEl();
     if (!f) return null;
-    const naturalWaterContents = [1,2,3].map(i => num(f.elements[`naturalWaterContent${i}`].value));
-    const naturalWaterValues = naturalWaterContents.filter(value => value !== null);
-    const naturalWaterContent = naturalWaterValues.length
-      ? naturalWaterValues.reduce((sum, value) => sum + value, 0) / naturalWaterValues.length
+
+    const naturalRows = [1,2,3].map(readNaturalMeasurement);
+    const naturalWaterMeasurements = naturalRows
+      .filter(row => row.status === 'valid')
+      .map(row => row.measurement);
+    const naturalWaterContent = naturalWaterMeasurements.length
+      ? naturalWaterMeasurements.reduce((sum, row) => sum + row.moisture, 0) / naturalWaterMeasurements.length
       : null;
+
     const moldMass = num(f.elements.moldMass.value);
     const moldSoilMass = num(f.elements.moldSoilMass.value);
     const batchSoilMass = num(f.elements.batchSoilMass.value);
     const soilMass = moldMass !== null && moldSoilMass !== null ? moldSoilMass - moldMass : null;
     const wetDensity = soilMass !== null && soilMass > 0 ? soilMass / MOLD_VOLUME : null;
     const batchVolume = wetDensity !== null && batchSoilMass !== null && batchSoilMass > 0 ? batchSoilMass / wetDensity : null;
+
     const additions = [1,2,3].map(i => {
       const dosage = num(f.elements[`dosage${i}`].value);
       const cementMass = dosage !== null && dosage >= 0 && batchVolume !== null ? (dosage / 1000) * batchVolume : null;
       return { dosage, cementMass };
     });
+
     const airDays = num(f.elements.airCuringDays.value);
     const waterDays = num(f.elements.waterCuringDays.value);
     const enteredCuringDays = airDays !== null || waterDays !== null
       ? (airDays || 0) + (waterDays || 0)
       : null;
     const dateDays = dateDiffDays(f.elements.specimenDate.value, f.elements.compressionDate.value);
-    return { naturalWaterContents, naturalWaterValues, naturalWaterContent, moldMass, moldSoilMass, soilMass, wetDensity, batchSoilMass, batchVolume, additions, airDays, waterDays, enteredCuringDays, dateDays };
+
+    return {
+      naturalRows,
+      naturalWaterMeasurements,
+      naturalWaterContent,
+      moldMass,
+      moldSoilMass,
+      soilMass,
+      wetDensity,
+      batchSoilMass,
+      batchVolume,
+      additions,
+      airDays,
+      waterDays,
+      enteredCuringDays,
+      dateDays,
+    };
   }
 
   function setText(id, text){
@@ -220,13 +277,43 @@
   function updatePreview(){
     const r = calculations();
     if (!r) return;
-    setText('mixNaturalWaterAverage', r.naturalWaterContent !== null ? `${r.naturalWaterContent.toFixed(1)} %（${r.naturalWaterValues.length}点平均）` : '—');
+
+    r.naturalRows.forEach(row => {
+      let text = '—';
+      if (row.status === 'valid') text = `${row.measurement.moisture.toFixed(1)} %`;
+      if (row.status === 'incomplete') text = '入力途中';
+      if (row.status === 'invalid') text = '確認';
+      setText(`mixNaturalMoisture${row.index}`, text);
+    });
+    setText(
+      'mixNaturalWaterAverage',
+      r.naturalWaterContent !== null
+        ? `${r.naturalWaterContent.toFixed(1)} %（${r.naturalWaterMeasurements.length}点平均）`
+        : '—'
+    );
+
     setText('mixSoilMass', r.soilMass !== null && r.soilMass > 0 ? `${r.soilMass.toFixed(1)} g` : '—');
     setText('mixWetDensity', r.wetDensity !== null ? `${r.wetDensity.toFixed(3)} g/cm³` : '—');
     setText('mixBatchVolume', r.batchVolume !== null ? `${r.batchVolume.toFixed(1)} cc` : '—');
     r.additions.forEach((a, index) => {
       setText(`mixCementMass${index + 1}`, a.cementMass !== null ? `${a.cementMass.toFixed(1)} g` : '—');
     });
+
+    const moistureCheck = document.getElementById('mixNaturalWaterCheck');
+    if (moistureCheck) {
+      moistureCheck.classList.remove('error');
+      const bad = r.naturalRows.find(row => row.status === 'incomplete' || row.status === 'invalid');
+      if (bad) {
+        moistureCheck.textContent = bad.status === 'incomplete'
+          ? `⚠ ${bad.index}行目の自然含水比データが入力途中です。`
+          : `⚠ ${bad.index}行目の質量関係を確認してください。`;
+        moistureCheck.classList.add('error');
+      } else if (r.naturalWaterMeasurements.length) {
+        moistureCheck.textContent = `自然含水比 ${r.naturalWaterContent.toFixed(1)} % ｜ ${r.naturalWaterMeasurements.length}点平均`;
+      } else {
+        moistureCheck.textContent = '1～3点入力できます。1点だけでも保存できます。';
+      }
+    }
 
     const curing = document.getElementById('mixCuringCheck');
     if (curing) {
@@ -260,6 +347,17 @@
     }
   }
 
+  function moistureRow(index){
+    return `
+      <div class="mix-moisture-row">
+        <input name="naturalContainerNo${index}" autocomplete="off" placeholder="No." aria-label="容器No ${index}">
+        <input name="naturalWetMass${index}" inputmode="decimal" autocomplete="off" placeholder="g" aria-label="容器＋湿潤土質量 ${index}">
+        <input name="naturalDryMass${index}" inputmode="decimal" autocomplete="off" placeholder="g" aria-label="乾燥後の容器＋土質量 ${index}">
+        <input name="naturalContainerMass${index}" inputmode="decimal" autocomplete="off" placeholder="g" aria-label="容器質量 ${index}">
+        <strong id="mixNaturalMoisture${index}">—</strong>
+      </div>`;
+  }
+
   function injectUI(){
     const actions = document.querySelector('#detailView .test-actions');
     if (actions && !document.getElementById('addMixDesignBtn')) {
@@ -285,19 +383,34 @@
 
         <section class="mix-panel">
           <div class="subsection-head"><div><span class="step-badge">1</span><strong>基本条件</strong></div><p>供試体作製条件と養生条件を記録します。</p></div>
-          <div class="mix-grid mix-grid-3">
+          <div class="mix-grid mix-grid-2">
             <label>試料名 / No.<select name="sample" class="managed-sample-select" required></select></label>
-            <div class="mix-moisture-block">
-              <span class="mix-field-label">自然含水比 wn (%)</span>
-              <div class="mix-moisture-inputs">
-                <label>①<input name="naturalWaterContent1" inputmode="decimal" autocomplete="off" placeholder="%"></label>
-                <label>②<input name="naturalWaterContent2" inputmode="decimal" autocomplete="off" placeholder="%"></label>
-                <label>③<input name="naturalWaterContent3" inputmode="decimal" autocomplete="off" placeholder="%"></label>
-              </div>
-              <div class="mix-moisture-average"><span>平均</span><strong id="mixNaturalWaterAverage">—</strong></div>
-            </div>
             <label>供試体の試験種別<select name="specimenType"><option value="unconfined">一軸圧縮試験</option><option value="cone">コーン指数試験</option><option value="cbr">CBR試験</option></select></label>
           </div>
+
+          <div class="mix-natural-water">
+            <div class="mix-natural-water-head">
+              <div><strong>自然含水比 wn</strong><small>最大3点・1点だけでも可</small></div>
+              <div class="mix-moisture-average"><span>平均</span><strong id="mixNaturalWaterAverage">—</strong></div>
+            </div>
+            <div class="mix-moisture-table-wrap">
+              <div class="mix-moisture-table">
+                <div class="mix-moisture-head">
+                  <span>容器No.</span>
+                  <span>容器＋湿潤土質量 (g)</span>
+                  <span>乾燥後の容器＋土質量 (g)</span>
+                  <span>容器質量 (g)</span>
+                  <span>含水比</span>
+                </div>
+                ${moistureRow(1)}
+                ${moistureRow(2)}
+                ${moistureRow(3)}
+              </div>
+            </div>
+            <div id="mixNaturalWaterCheck" class="mass-check">1～3点入力できます。1点だけでも保存できます。</div>
+            <div id="mixLegacyNaturalWater" class="mix-help hidden"></div>
+          </div>
+
           <div class="mix-grid mix-grid-2">
             <label>使用セメント<select name="cementChoice"></select></label>
             <label id="mixCementManualWrap" class="hidden">新しいセメント名<input name="cementManual" autocomplete="off" placeholder="例：○○固化材"></label>
@@ -357,12 +470,18 @@
         .mix-panel{margin-top:14px;padding:14px;border:1px solid var(--line,#dfe7e3);border-radius:16px;background:#fff}
         .mix-grid{display:grid;gap:10px;align-items:end}.mix-grid-3{grid-template-columns:repeat(3,1fr)}.mix-grid-2{grid-template-columns:repeat(2,1fr)}
         .mix-design-dialog select{width:100%;min-height:46px;border:1px solid var(--line,#dfe7e3);border-radius:12px;background:#fff;padding:0 10px;font-size:15px;color:#1f2a24}
-        .mix-moisture-block{display:flex;flex-direction:column;gap:6px}.mix-field-label{font-size:12px;font-weight:600;color:#26352d}.mix-moisture-inputs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}.mix-moisture-inputs label{font-size:10px;color:var(--muted,#68766e)}.mix-moisture-inputs input{margin-top:3px}.mix-moisture-average{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 10px;border:1px solid var(--line,#dfe7e3);border-radius:10px;background:#f8fbfa}.mix-moisture-average span{font-size:11px;color:var(--muted,#68766e)}.mix-moisture-average strong{font-size:15px;color:var(--accent-dark,#0b5136)}
+        .mix-natural-water{margin:12px 0;padding:12px;border:1px solid var(--line,#dfe7e3);border-radius:14px;background:#f8fbfa}
+        .mix-natural-water-head{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:8px}.mix-natural-water-head small{display:block;color:var(--muted,#68766e);font-size:10px;margin-top:2px}
+        .mix-moisture-table-wrap{overflow-x:auto;padding-bottom:2px}.mix-moisture-table{min-width:720px;display:grid;gap:6px}
+        .mix-moisture-head,.mix-moisture-row{display:grid;grid-template-columns:90px 1fr 1fr 1fr 100px;gap:6px;align-items:center}
+        .mix-moisture-head{font-size:10px;color:var(--muted,#68766e);padding:0 4px}
+        .mix-moisture-row input{min-width:0}.mix-moisture-row>strong{display:flex;align-items:center;justify-content:center;min-height:46px;border:1px solid var(--line,#dfe7e3);border-radius:11px;background:#fff;color:var(--accent-dark,#0b5136)}
+        .mix-moisture-average{display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid var(--line,#dfe7e3);border-radius:10px;background:#fff}.mix-moisture-average span{font-size:11px;color:var(--muted,#68766e)}.mix-moisture-average strong{font-size:15px;color:var(--accent-dark,#0b5136)}
         .mix-results{display:grid;gap:9px;margin-top:10px}.mix-results-3{grid-template-columns:repeat(3,1fr)}.mix-results>div,.mix-result-highlight{padding:12px;border:1px solid var(--line,#dfe7e3);border-radius:13px;background:#f8fbfa;text-align:center}
         .mix-results span,.mix-result-highlight span,.mix-result-highlight small{display:block;font-size:11px;color:var(--muted,#68766e)}.mix-results strong,.mix-result-highlight strong{display:block;margin:3px 0;font-size:23px;color:var(--accent-dark,#0b5136)}
         .mix-help{display:block;margin-top:5px;color:var(--muted,#68766e);font-size:10px}.mix-additions{display:grid;gap:9px}.mix-addition-row{display:grid;grid-template-columns:42px 1fr 1fr;gap:10px;align-items:end;padding:11px;border:1px solid var(--line,#dfe7e3);border-radius:14px;background:#f8fbfa}.mix-addition-row>strong{font-size:22px;color:var(--accent-dark,#0b5136);align-self:center;text-align:center}.mix-addition-row>div{min-height:48px;padding:8px 10px;border:1px solid var(--line,#dfe7e3);border-radius:12px;background:#fff;display:flex;flex-direction:column;justify-content:center}.mix-addition-row>div span{font-size:11px;color:var(--muted,#68766e)}.mix-addition-row>div strong{font-size:20px;color:var(--accent-dark,#0b5136)}
-        @media(max-width:760px){.mix-grid-3{grid-template-columns:1fr 1fr}.mix-addition-row{grid-template-columns:36px 1fr 1fr}.mix-moisture-block{grid-column:span 2}}
-        @media(max-width:560px){.mix-grid-3,.mix-grid-2{grid-template-columns:1fr}.mix-moisture-block{grid-column:auto}.mix-results-3{grid-template-columns:1fr 1fr}.mix-addition-row{grid-template-columns:32px 1fr}.mix-addition-row>div{grid-column:2}.mix-design-dialog .subsection-head{align-items:flex-start}}
+        @media(max-width:760px){.mix-grid-3{grid-template-columns:1fr 1fr}.mix-addition-row{grid-template-columns:36px 1fr 1fr}}
+        @media(max-width:560px){.mix-grid-3,.mix-grid-2{grid-template-columns:1fr}.mix-results-3{grid-template-columns:1fr 1fr}.mix-addition-row{grid-template-columns:32px 1fr}.mix-addition-row>div{grid-column:2}.mix-design-dialog .subsection-head{align-items:flex-start}.mix-natural-water-head{align-items:flex-start;flex-direction:column}.mix-moisture-average{width:100%;justify-content:space-between}}
       `;
       document.head.appendChild(style);
     }
@@ -388,6 +507,7 @@
     f.elements.batchSoilMass.value = '1500';
     f.elements.airCuringDays.value = '';
     f.elements.waterCuringDays.value = '';
+    document.getElementById('mixLegacyNaturalWater')?.classList.add('hidden');
     applySpecimenType();
     document.getElementById('mixDesignTitle').textContent = '配合試験・安定処理土の供試体作製';
     document.getElementById('mixDesignSubmit').textContent = '保存';
@@ -416,12 +536,24 @@
     document.getElementById('mixDesignSubmit').textContent = '訂正を保存';
     syncSampleSelect(test.sample || '');
     syncCementSelect(test.cementName || '');
-    const savedNaturalWaterContents = Array.isArray(test.naturalWaterContents)
-      ? test.naturalWaterContents.slice(0,3)
-      : [test.naturalWaterContent ?? null, null, null];
-    [1,2,3].forEach((i) => {
-      f.elements[`naturalWaterContent${i}`].value = savedNaturalWaterContents[i - 1] ?? '';
+
+    const measurements = Array.isArray(test.naturalWaterMeasurements) ? test.naturalWaterMeasurements.slice(0,3) : [];
+    measurements.forEach((m, i) => {
+      const n = i + 1;
+      f.elements[`naturalContainerNo${n}`].value = m.containerNo ?? '';
+      f.elements[`naturalWetMass${n}`].value = m.wetMass ?? '';
+      f.elements[`naturalDryMass${n}`].value = m.dryMass ?? '';
+      f.elements[`naturalContainerMass${n}`].value = m.containerMass ?? '';
     });
+
+    if (!measurements.length && num(test.naturalWaterContent) !== null) {
+      const legacy = document.getElementById('mixLegacyNaturalWater');
+      if (legacy) {
+        legacy.textContent = `旧形式の自然含水比 ${num(test.naturalWaterContent).toFixed(1)} % を保持しています。質量を入力すると新形式に更新します。`;
+        legacy.classList.remove('hidden');
+      }
+    }
+
     f.elements.specimenType.value = test.specimenType || 'unconfined';
     f.elements.specimenDate.value = test.specimenDate || '';
     f.elements.compressionDate.value = test.compressionDate || '';
@@ -432,7 +564,9 @@
     f.elements.moldSoilMass.value = test.moldSoilMass ?? '';
     applySpecimenType();
     f.elements.batchSoilMass.value = test.batchSoilMass ?? (specimenType() === 'unconfined' ? 1500 : '');
-    (test.additions || []).slice(0,3).forEach((row, i) => { f.elements[`dosage${i + 1}`].value = row.dosage ?? ''; });
+    (test.additions || []).slice(0,3).forEach((row, i) => {
+      f.elements[`dosage${i + 1}`].value = row.dosage ?? '';
+    });
     updatePreview();
     dialogEl().showModal();
   }
@@ -442,13 +576,29 @@
     const f = formEl();
     const p = currentProject?.();
     if (!f || !p) return;
+
     const sample = f.elements.sample.value.trim();
     const cementName = selectedCement();
     const r = calculations();
+    const existing = state.editingTestId
+      ? p.tests.find(x => x.id === state.editingTestId && x.type === TYPE)
+      : null;
+    const legacyWn = existing && num(existing.naturalWaterContent) !== null
+      ? num(existing.naturalWaterContent)
+      : null;
+    const badNaturalRow = r.naturalRows.find(row => row.status === 'incomplete' || row.status === 'invalid');
 
     if (!sample) { alert('試料を選択してください。'); return; }
-    if (!r.naturalWaterValues.length) { alert('自然含水比を1つ以上入力してください。'); return; }
-    if (r.naturalWaterValues.some(value => value < 0)) { alert('自然含水比は0以上で入力してください。'); return; }
+    if (badNaturalRow) {
+      alert(badNaturalRow.status === 'incomplete'
+        ? `自然含水比の${badNaturalRow.index}行目が入力途中です。容器No.と3つの質量を入力してください。`
+        : `自然含水比の${badNaturalRow.index}行目の質量関係を確認してください。`);
+      return;
+    }
+    if (!r.naturalWaterMeasurements.length && legacyWn === null) {
+      alert('自然含水比を1点以上入力してください。');
+      return;
+    }
     if (!cementName) { alert('使用セメントを選択または入力してください。'); return; }
     if (r.moldMass === null || r.moldSoilMass === null || r.soilMass === null || r.soilMass <= 0 || r.wetDensity === null) {
       alert('モールド質量とモールド＋土質量を確認してください。'); return;
@@ -463,14 +613,25 @@
       alert('圧縮日／試験日が供試体作製日より前になっています。'); return;
     }
 
+    const naturalWaterContent = r.naturalWaterMeasurements.length ? r.naturalWaterContent : legacyWn;
+    const naturalWaterMeasurements = r.naturalWaterMeasurements.length
+      ? r.naturalWaterMeasurements
+      : (Array.isArray(existing?.naturalWaterMeasurements) ? existing.naturalWaterMeasurements : []);
+    const naturalWaterContents = r.naturalWaterMeasurements.length
+      ? r.naturalWaterMeasurements.map(row => row.moisture)
+      : (Array.isArray(existing?.naturalWaterContents)
+        ? existing.naturalWaterContents
+        : (legacyWn !== null ? [legacyWn] : []));
+
     const sampleOption = f.elements.sample.selectedOptions[0];
     const sampleId = sampleOption?.dataset?.sampleId || null;
     const now = new Date().toISOString();
     const payload = {
       sample,
       sampleId,
-      naturalWaterContent: r.naturalWaterContent,
-      naturalWaterContents: r.naturalWaterContents,
+      naturalWaterContent,
+      naturalWaterContents,
+      naturalWaterMeasurements,
       cementName,
       specimenType: f.elements.specimenType.value,
       specimenDate: f.elements.specimenDate.value || '',
@@ -494,17 +655,16 @@
     };
 
     rememberCement(cementName);
-    if (state.editingTestId) {
-      const test = p.tests.find(x => x.id === state.editingTestId && x.type === TYPE);
-      if (!test) return;
-      Object.assign(test, payload, { updatedAt:now });
-      delete test.draft;
-      delete test.draftFields;
-      delete test.draftFieldLabels;
-      delete test.draftSavedAt;
+    if (existing) {
+      Object.assign(existing, payload, { updatedAt:now });
+      delete existing.draft;
+      delete existing.draftFields;
+      delete existing.draftFieldLabels;
+      delete existing.draftSavedAt;
     } else {
       p.tests.push({ id:uid(), type:TYPE, ...payload, createdAt:now });
     }
+
     p.updatedAt = now;
     saveData();
     dialogEl().close();
@@ -516,6 +676,7 @@
     const def = SPECIMEN_TYPES[test.specimenType] || SPECIMEN_TYPES.unconfined;
     const adds = (test.additions || []).slice(0,3).map(a => Number.isFinite(Number(a.dosage)) ? Number(a.dosage).toFixed(0) : '—').join(' / ');
     const wn = num(test.naturalWaterContent);
+    const moistureCount = Array.isArray(test.naturalWaterMeasurements) ? test.naturalWaterMeasurements.length : 0;
     return `
       <div class="card-title-row">
         <div>
@@ -526,7 +687,7 @@
         <button type="button" class="edit-btn" data-edit-mix-design="${esc(test.id)}">訂正</button>
       </div>
       <div class="fraction-card-row">
-        <div><span>自然含水比 wn</span><strong>${wn !== null ? wn.toFixed(1) : '—'} %</strong></div>
+        <div><span>自然含水比 wn</span><strong>${wn !== null ? wn.toFixed(1) : '—'} %</strong>${moistureCount ? `<small>${moistureCount}点平均</small>` : ''}</div>
         <div><span>湿潤密度 ρt</span><strong>${num(test.wetDensity)?.toFixed(3) ?? '—'} g/cm³</strong></div>
         <div><span>作製体積</span><strong>${num(test.batchVolume)?.toFixed(1) ?? '—'} cc</strong></div>
         <div><span>添加量 kg/m³</span><strong>${esc(adds)}</strong></div>
