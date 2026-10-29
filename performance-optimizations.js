@@ -1,4 +1,4 @@
-// SoilNote performance optimizations: reduce off-screen rendering and release report DOM after closing.
+// SoilNote performance optimizations: reduce off-screen test-card rendering and release report DOM after closing.
 (function(){
   'use strict';
 
@@ -22,7 +22,8 @@
     style.id = 'soilnotePerformanceStyles';
     style.textContent = `
       #testList>.card{content-visibility:auto;contain-intrinsic-size:220px}
-      #reportPages .report-page{content-visibility:auto;contain-intrinsic-size:900px}
+      /* Do not use content-visibility on report pages: iOS Safari may clip A4 pages inside <dialog>. */
+      #reportPages .report-page{content-visibility:visible!important;contain:none!important}
     `;
     document.head.appendChild(style);
   }
