@@ -14,6 +14,14 @@
     cbr:{volume:2209,count:1},
   };
 
+  // 確認画面：湿潤密度表の最終罫線と補足文が重ならないようにする。
+  if(!document.getElementById('mixReviewSpacingFix')){
+    const style=document.createElement('style');
+    style.id='mixReviewSpacingFix';
+    style.textContent='.review-section>.mix-review-scroll+.review-meta{margin:10px 0 16px;}';
+    document.head.appendChild(style);
+  }
+
   const number=value=>{
     const text=String(value??'').trim();
     if(text==='')return null;
