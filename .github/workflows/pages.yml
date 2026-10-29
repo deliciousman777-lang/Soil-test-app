@@ -26,7 +26,7 @@ jobs:
 
       - name: Check JavaScript syntax
         run: |
-          for f in app.js grain-delete-early.js sedimentation.js hydrometer-input.js sedimentation-cm-fix.js sedimentation-workbench.js sedimentation-workbench-focus-fix.js sedimentation-alarm.js sedimentation-auto-open.js grain-delete.js grain-charts.js fine-sieve.js dvalue-spline.js particle-density.js particle-density-common-temp.js pycnometer-master.js report-sheet.js report-ternary-fix.js atterberg-limits.js cone-index.js compaction.js mix-design.js report-extra-tests.js sample-manager.js mix-density-three.js mix-density-autofill.js atterberg-np.js review-all-tests.js mix-design-review.js draft-save.js grain-wash-containers.js test-date.js numeric-input.js supabase-config.js cloud-share.js edit-lock.js project-test-plan.js input-usability.js project-completion.js project-workflow.js; do
+          for f in app.js grain-delete-early.js sedimentation.js hydrometer-input.js sedimentation-cm-fix.js sedimentation-workbench.js sedimentation-workbench-focus-fix.js sedimentation-alarm.js sedimentation-auto-open.js grain-delete.js grain-charts.js fine-sieve.js dvalue-spline.js particle-density.js particle-density-common-temp.js pycnometer-master.js report-sheet.js report-ternary-fix.js atterberg-limits.js cone-index.js compaction.js mix-design.js report-extra-tests.js report-mix-design.js sample-manager.js mix-density-three.js mix-density-autofill.js mix-design-persist-fix.js atterberg-np.js review-all-tests.js mix-design-review.js mix-design-review-v2.js draft-save.js grain-wash-containers.js test-date.js numeric-input.js supabase-config.js cloud-share.js edit-lock.js project-test-plan.js input-usability.js project-completion.js project-workflow.js; do
             node --check "$f"
           done
 
@@ -56,12 +56,15 @@ jobs:
               'compaction.js',
               'mix-design.js',
               'report-extra-tests.js',
+              'report-mix-design.js',
               'sample-manager.js',
               'mix-density-three.js',
               'mix-density-autofill.js',
+              'mix-design-persist-fix.js',
               'atterberg-np.js',
               'review-all-tests.js',
               'mix-design-review.js',
+              'mix-design-review-v2.js',
               'draft-save.js',
               'grain-wash-containers.js',
               'test-date.js',
@@ -135,7 +138,10 @@ jobs:
           assert 'mix-design.js' in html, 'Mix design script missing'
           assert 'mix-density-three.js' in html, 'Three-point mix density script missing'
           assert 'mix-density-autofill.js' in html, 'Mix density autofill script missing'
+          assert 'mix-design-persist-fix.js' in html, 'Mix design persistence fix missing'
+          assert 'report-mix-design.js' in html, 'Mix design report page missing'
           assert 'mix-design-review.js' in html, 'Mix design review script missing'
+          assert 'mix-design-review-v2.js' in html, 'Mix design review v2 missing'
           assert 'project-completion.js' in html, 'Project completion script missing'
           assert 'project-workflow.js' in html, 'Project workflow script missing'
           assert 'cloud-sync.js' not in html, 'Old cloud sync script must not be published'
