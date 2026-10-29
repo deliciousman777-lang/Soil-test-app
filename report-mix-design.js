@@ -97,10 +97,11 @@
     const sel=document.getElementById('reportSampleSelect');
     const p=project();
     if(!root||!sel||!p||!root.querySelector('.report-page'))return;
-    root.querySelector('#reportMixDesignPage')?.remove();
     const sample=sel.value||'';
     const test=latest(p.tests,TYPE,sample);
-    if(test)root.insertAdjacentHTML('beforeend',page(p,sample,test));
+    const existing=root.querySelector('#reportMixDesignPage');
+    if(test&&!existing)root.insertAdjacentHTML('beforeend',page(p,sample,test));
+    if(!test&&existing)existing.remove();
     renumber(root);
   }
 
