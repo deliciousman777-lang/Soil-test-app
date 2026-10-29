@@ -124,9 +124,10 @@
     styles();
     const p=project(),sel=document.getElementById('reportSampleSelect');
     if(!root||!p||!sel||!root.querySelector('.report-page'))return;
-    root.querySelector('#reportUnconfinedPage')?.remove();
+    const existing=root.querySelector('#reportUnconfinedPage');
     const arr=testRows(p,sel.value||'');
-    if(arr.length)root.insertAdjacentHTML('beforeend',page(p,sel.value||'',arr));
+    if(arr.length&&!existing)root.insertAdjacentHTML('beforeend',page(p,sel.value||'',arr));
+    if(!arr.length&&existing)existing.remove();
     renumber(root);
   }
 
