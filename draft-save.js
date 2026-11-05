@@ -95,6 +95,23 @@
     return hadDraft;
   }
 
+  // 粒度の質量は、再開や端末同期で空欄が来ても最後の入力値を失わないよう保持する。
+  function hasMassValue(value){
+    return value!==null && value!==undefined && String(value).trim()!=='';
+  }
+
+  function protectGrainMassDraft(fields,test){
+    const backup={...(test?.grainMassBackup||{})};
+    for(const name of ['totalDryMass','fineDryMass']){
+      if(!hasMassValue(fields[name])){
+        const previous=[test?.draftFields?.[name],test?.[name],backup[name]].find(hasMassValue);
+        if(hasMassValue(previous)) fields[name]=String(previous);
+      }
+      if(hasMassValue(fields[name])) backup[name]=String(fields[name]);
+    }
+    return backup;
+  }
+
   function saveDraft(form,cfg){
     const p=project();if(!p)return;
     const {fields,labels}=serializeForm(form);
@@ -102,9 +119,11 @@
     const sample=String(fields.sample??'').trim();
     let test=state.editingTestId?testById(state.editingTestId):null;
     if(test&&test.type!==cfg.type)test=null;
+    const grainMassBackup=cfg.type==='grain'?protectGrainMassDraft(fields,test):null;
 
     if(test){
       Object.assign(test,{
+        ...(grainMassBackup?{grainMassBackup}:{}),
         sample,
         draft:true,
         draftFields:fields,
@@ -115,6 +134,7 @@
     }else{
       test={
         id:uid(),type:cfg.type,sample,
+        ...(grainMassBackup?{grainMassBackup}:{}),
         draft:true,draftFields:fields,draftFieldLabels:labels,
         draftSavedAt:now,createdAt:now,updatedAt:now
       };
