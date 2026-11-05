@@ -44,6 +44,27 @@
     return `legacy:${String(t?.type||'')}:${String(t?.sample||'')}:${String(t?.createdAt||'')}:${index}`;
   }
 
+  // 共有端末の片方が古い/空欄データを保存しても、粒度の測定質量を消さない。
+  function hasMassValue(v){
+    return v!==null && v!==undefined && String(v).trim()!=='';
+  }
+
+  function preserveGrainMass(newer,older){
+    const next=clone(newer);
+    if(next?.type!=='grain' || older?.type!=='grain')return next;
+    for(const name of ['totalDryMass','fineDryMass']){
+      const current=next.draft?next.draftFields?.[name]:next[name];
+      const known=[current,next.grainMassBackup?.[name],next.draftFields?.[name],next[name],older.draftFields?.[name],older[name],older.grainMassBackup?.[name]].find(hasMassValue);
+      if(!hasMassValue(known))continue;
+      if(!hasMassValue(current)){
+        if(next.draft)next.draftFields={...(next.draftFields||{}),[name]:String(known)};
+        else next[name]=Number(known);
+      }
+      next.grainMassBackup={...(next.grainMassBackup||{}),[name]:String(known)};
+    }
+    return next;
+  }
+
   function mergeProjects(a,b){
     if(!a)return clone(b);
     if(!b)return clone(a);
@@ -53,7 +74,10 @@
       (Array.isArray(list)?list:[]).forEach((t,i)=>{
         const key=testKey(t,i);
         const old=merged.get(key);
-        if(!old || testStamp(t) >= testStamp(old)) merged.set(key,clone(t));
+        if(!old){merged.set(key,clone(t));return;}
+        const newer=testStamp(t)>=testStamp(old)?t:old;
+        const older=newer===t?old:t;
+        merged.set(key,preserveGrainMass(newer,older));
       });
     };
     add(a.tests);add(b.tests);
