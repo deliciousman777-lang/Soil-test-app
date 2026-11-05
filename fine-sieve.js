@@ -324,6 +324,8 @@
       sample,
       totalDryMass: result.total,
       fineDryMass: result.fineDryMass,
+      // 入力済みの2質量を独立して保持し、端末同期で空欄が来た時の復元元にする。
+      grainMassBackup: {totalDryMass: String(result.total), fineDryMass: String(result.fineDryMass)},
       sieves: result.sieves.map(row => ({ size: row.size, retained: row.retained })),
       remainder: result.remainder,
       fractions: result.fractions,
