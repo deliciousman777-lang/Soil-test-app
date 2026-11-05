@@ -128,6 +128,8 @@ jobs:
           assert p.read_bytes()[:8] == b'\x89PNG\r\n\x1a\n', 'not a PNG'
           html = Path('index.html').read_text(encoding='utf-8')
           assert 'grain-delete-early.js' in html, 'Early grain delete script missing'
+          assert 'name="totalDryMass"' in html, 'Grain total dry mass input missing'
+          assert 'name="fineDryMass"' in html, 'Grain 2mm passing dry mass input missing'
           assert 'supabase-config.js' in html, 'Supabase config script missing'
           assert 'cloud-share.js' in html, 'Cloud share script missing'
           assert 'edit-lock.js' in html, 'Edit lock script missing'
