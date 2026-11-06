@@ -52,7 +52,7 @@
     const def=TEST_DEFS.find(x=>x.key===key);
     if(!def) return false;
     const tests=Array.isArray(project?.tests)?project.tests:[];
-    return tests.some(test=>def.types.includes(String(test?.type||'')));
+    return tests.some(test=>!test?.draft && def.types.includes(String(test?.type||'')));
   }
 
   function planStats(project){
