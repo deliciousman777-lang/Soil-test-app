@@ -6,7 +6,10 @@
     grainForm:{type:'grain',dialog:'grainDialog',name:'粒度試験',editAttr:'data-edit-grain'},
     particleDensityForm:{type:'particleDensity',dialog:'particleDensityDialog',name:'土粒子の密度試験',editAttr:'data-edit-pd'},
     atterbergForm:{type:'atterberg',dialog:'atterbergDialog',name:'液性限界・塑性限界試験',editAttr:'data-edit-atterberg'},
-    coneIndexForm:{type:'cone-index',dialog:'coneIndexDialog',name:'締固めた土のコーン指数試験',editAttr:'data-edit-cone-index'}
+    coneIndexForm:{type:'cone-index',dialog:'coneIndexDialog',name:'締固めた土のコーン指数試験',editAttr:'data-edit-cone-index'},
+    compactionForm:{type:'compaction',dialog:'compactionDialog',name:'突固めによる土の締固め試験',editAttr:'data-edit-compaction'},
+    mixDesignForm:{type:'mix-design',dialog:'mixDesignDialog',name:'配合試験・供試体作製',editAttr:'data-edit-mix-design'},
+    unconfinedForm:{type:'unconfined-compression',dialog:'unconfinedDialog',name:'一軸圧縮試験',editAttr:'data-edit-unconfined'}
   };
 
   const esc=v=>typeof escapeHtml==='function'?escapeHtml(v):String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#039;'}[c]));
@@ -92,6 +95,7 @@
     delete test.draftFields;
     delete test.draftFieldLabels;
     delete test.draftSavedAt;
+    delete test.draftExtra;
     return hadDraft;
   }
 
@@ -112,6 +116,33 @@
     return backup;
   }
 
+
+  // 乾燥待ちの入力がある時だけ「保存」を途中保存へ切り替える。
+  // 未使用の任意行は判定せず、NP選択時の液塑性も通常保存する。
+  function hasPendingDryMass(form,cfg){
+    const fields=serializeForm(form).fields;
+    const filled=name=>hasMassValue(fields[name]);
+    const pending=(dry,...peers)=>!filled(dry)&&peers.some(filled);
+    if(cfg.type==='moisture')return [1,2,3].some(i=>pending(`dryMass${i}`,`wetMass${i}`,`containerMass${i}`,`containerNo${i}`));
+    if(cfg.type==='grain')return !filled('totalDryMass');
+    if(cfg.type==='particleDensity')return [1,2,3].some(i=>pending(`ms_${i}`,`mb1_${i}`,`t1_${i}`,`pycNo_${i}`));
+    if(cfg.type==='atterberg'){
+      if(fields.nonPlastic)return false;
+      return [1,2,3,4,5,6,7,8,9,10].some(i=>
+        pending(`llDry_${i}`,`llWet_${i}`,`llC_${i}`,`llNo_${i}`,`llN_${i}`) ||
+        pending(`plDry_${i}`,`plWet_${i}`,`plC_${i}`,`plNo_${i}`)
+      );
+    }
+    if(cfg.type==='cone-index')return [1,2].some(i=>pending(`mb${i}`,`ma${i}`,`mc${i}`,`waterNo${i}`));
+    if(cfg.type==='compaction')return [1,2,3,4,5,6,7,8].some(i=>[1,2].some(j=>pending(
+      `waterMb_${i}_${j}`,`waterMa_${i}_${j}`,`waterMc_${i}_${j}`,`waterNo_${i}_${j}`
+    )));
+    if(cfg.type==='mix-design')return [1,2,3].some(i=>pending(`naturalDryMass${i}`,
+      `naturalWetMass${i}`,`naturalContainerMass${i}`,`naturalContainerNo${i}`));
+    if(cfg.type==='unconfined-compression')return [1,2,3].some(i=>pending(`mb${i}`,`ma${i}`,`mc${i}`,`containerNo${i}`));
+    return false;
+  }
+
   function saveDraft(form,cfg){
     const p=project();if(!p)return;
     const {fields,labels}=serializeForm(form);
@@ -120,10 +151,12 @@
     let test=state.editingTestId?testById(state.editingTestId):null;
     if(test&&test.type!==cfg.type)test=null;
     const grainMassBackup=cfg.type==='grain'?protectGrainMassDraft(fields,test):null;
+    const draftExtra=cfg.type==='unconfined-compression'?window.SoilNoteUnconfinedDraft?.snapshot?.():null;
 
     if(test){
       Object.assign(test,{
         ...(grainMassBackup?{grainMassBackup}:{}),
+        ...(draftExtra?{draftExtra}:{}),
         sample,
         draft:true,
         draftFields:fields,
@@ -135,6 +168,7 @@
       test={
         id:uid(),type:cfg.type,sample,
         ...(grainMassBackup?{grainMassBackup}:{}),
+        ...(draftExtra?{draftExtra}:{}),
         draft:true,draftFields:fields,draftFieldLabels:labels,
         draftSavedAt:now,createdAt:now,updatedAt:now
       };
@@ -162,6 +196,9 @@
       });
     });
     form.dataset.draftTestId=test.id;
+    if(cfg.type==='unconfined-compression'&&test.draftExtra){
+      window.SoilNoteUnconfinedDraft?.restore?.(test.draftExtra);
+    }
     form.dispatchEvent(new Event('input',{bubbles:true}));
     form.dispatchEvent(new Event('change',{bubbles:true}));
   }
@@ -177,6 +214,16 @@
       btn.addEventListener('click',()=>saveDraft(form,cfg));
       const cancel=actions.querySelector('.ghost');
       if(cancel)actions.insertBefore(btn,cancel);else actions.insertBefore(btn,actions.firstChild);
+
+      // 未乾燥の測定値があれば、通常の保存ボタンでも先に途中保存する。
+      // required属性で送信が止まる前にclickを捕捉する。
+      form.addEventListener('click',event=>{
+        const button=event.target.closest?.('button');
+        if(!button||button.form!==form||button.type==='button'||button.type==='reset')return;
+        if(!hasPendingDryMass(form,cfg))return;
+        event.preventDefault();event.stopImmediatePropagation();
+        saveDraft(form,cfg);
+      },true);
 
       const dialog=document.getElementById(cfg.dialog);
       dialog?.addEventListener('close',()=>{
@@ -281,7 +328,12 @@
 
   // Enterキーで完成保存した場合も、ドラフト完了判定に使う。
   document.addEventListener('keydown',e=>{
-    if(e.key!=='Enter')return;
+    if(e.key!=='Enter'||e.isComposing||e.target?.tagName==='TEXTAREA')return;
+    const activeForm=e.target?.closest?.('form');
+    const cfg=CONFIGS[activeForm?.id];
+    if(cfg&&hasPendingDryMass(activeForm,cfg)){
+      e.preventDefault();e.stopImmediatePropagation();saveDraft(activeForm,cfg);return;
+    }
     const form=e.target?.closest?.('form');
     if(!form?.dataset?.draftTestId)return;
     if(CONFIGS[form.id])form.dataset.finalSubmitPending='1';
