@@ -187,7 +187,7 @@
     const p=currentProject?.();if(!p?.tests)return;
     let changed=false;
     p.tests.forEach(test=>{
-      if(test?.draft&&isCompletedConeTest(test)){
+      if(test?.draft&&!test.draftFields&&isCompletedConeTest(test)){
         clearDraftState(test);
         changed=true;
       }
