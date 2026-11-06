@@ -37,9 +37,9 @@
     'ハードキープLD':'発塵抑制型',
   };
   const SPECIMEN_TYPES = {
-    unconfined: { label:'一軸圧縮試験', moldVolume:196.3, fixedSoilMass:1500 },
-    cone: { label:'コーン指数試験', moldVolume:1000, fixedSoilMass:2500 },
-    cbr: { label:'CBR試験', moldVolume:2209, fixedSoilMass:18000 },
+    unconfined: { label:'一軸圧縮試験', moldVolume:196.3, defaultSoilMass:1500 },
+    cone: { label:'コーン指数試験', moldVolume:1000, defaultSoilMass:2500 },
+    cbr: { label:'CBR試験', moldVolume:2209, defaultSoilMass:18000 },
   };
   const PREPARATION_METHODS = {
     'jcas-l01':'JCAS L-01（セメント協会仕様）',
@@ -198,15 +198,24 @@
     return SPECIMEN_TYPES[specimenType()] || SPECIMEN_TYPES.unconfined;
   }
 
+  function updateSoilMassNote(){
+    const f = formEl();
+    if (!f) return;
+    const def = specimenDefinition();
+    const note = document.getElementById('mixSoilMassNote');
+    const amount = num(f.elements.batchSoilMass.value);
+    const status = amount === null || amount <= 0 ? '使用土量を入力してください'
+      : amount === def.defaultSoilMass ? '規定量を使用中' : '任意土量を使用中';
+    if (note) note.textContent = `規定量：${def.defaultSoilMass.toLocaleString('ja-JP')} g ｜ ${status}`;
+  }
+
   function applySpecimenType(){
     const f = formEl();
     if (!f) return;
     const def = specimenDefinition();
-    const soilMass = f.elements.batchSoilMass;
-    const note = document.getElementById('mixSoilMassNote');
-    soilMass.value = String(def.fixedSoilMass);
-    soilMass.readOnly = true;
-    if (note) note.textContent = `${def.label}は ${def.fixedSoilMass.toLocaleString('ja-JP')} g 固定`;
+    // 試験種別を変更した時だけ規定土量を設定し、他の入力値には触れない。
+    f.elements.batchSoilMass.value = String(def.defaultSoilMass);
+    updateSoilMassNote();
     setText('mixMoldVolume', `${formatVolume(def.moldVolume)} cc`);
     setText('mixMoldVolumeHelp', `${def.label}：モールド体積 ${formatVolume(def.moldVolume)} cc で自動計算`);
   }
@@ -319,6 +328,7 @@
   function updatePreview(){
     const r = calculations();
     if (!r) return;
+    updateSoilMassNote();
 
     r.naturalRows.forEach(row => {
       let text = '—';
@@ -484,9 +494,16 @@
         </section>
 
         <section class="mix-panel">
-          <div class="subsection-head"><div><span class="step-badge">3</span><strong>配合作製量</strong></div><p>一軸 1500g・コーン 2500g・CBR 18000g に自動切替します。</p></div>
+          <div class="subsection-head"><div><span class="step-badge">3</span><strong>配合作製量</strong></div><p>試験ごとの規定土量を初期表示します。任意の土量に変更可能です。</p></div>
           <div class="mix-grid mix-grid-2">
-            <label>使用土量 (g)<input name="batchSoilMass" inputmode="decimal" autocomplete="off" value="1500" readonly><small id="mixSoilMassNote" class="mix-help">一軸圧縮試験は 1,500 g 固定</small></label>
+            <div class="mix-soil-amount">
+              <label for="mixBatchSoilMass">使用土量 (g)</label>
+              <div class="mix-soil-input-row">
+                <input id="mixBatchSoilMass" name="batchSoilMass" type="number" min="0.01" step="any" inputmode="decimal" autocomplete="off" value="1500" aria-describedby="mixSoilMassNote">
+                <button type="button" class="ghost" id="mixResetSoilMass">規定量に戻す</button>
+              </div>
+              <small id="mixSoilMassNote" class="mix-help">規定量：1,500 g ｜ 規定量を使用中</small>
+            </div>
             <div class="mix-result-highlight"><span>配合作製体積</span><strong id="mixBatchVolume">—</strong><small>使用土量 ÷ 湿潤密度</small></div>
           </div>
         </section>
@@ -522,7 +539,7 @@
         .mix-moisture-average{display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid var(--line,#dfe7e3);border-radius:10px;background:#fff}.mix-moisture-average span{font-size:11px;color:var(--muted,#68766e)}.mix-moisture-average strong{font-size:15px;color:var(--accent-dark,#0b5136)}
         .mix-results{display:grid;gap:9px;margin-top:10px}.mix-results-3{grid-template-columns:repeat(3,1fr)}.mix-results>div,.mix-result-highlight{padding:12px;border:1px solid var(--line,#dfe7e3);border-radius:13px;background:#f8fbfa;text-align:center}
         .mix-results span,.mix-result-highlight span,.mix-result-highlight small{display:block;font-size:11px;color:var(--muted,#68766e)}.mix-results strong,.mix-result-highlight strong{display:block;margin:3px 0;font-size:23px;color:var(--accent-dark,#0b5136)}
-        .mix-help{display:block;margin-top:5px;color:var(--muted,#68766e);font-size:10px}.mix-additions{display:grid;gap:9px}.mix-addition-row{display:grid;grid-template-columns:42px 1fr 1fr;gap:10px;align-items:end;padding:11px;border:1px solid var(--line,#dfe7e3);border-radius:14px;background:#f8fbfa}.mix-addition-row>strong{font-size:22px;color:var(--accent-dark,#0b5136);align-self:center;text-align:center}.mix-addition-row>div{min-height:48px;padding:8px 10px;border:1px solid var(--line,#dfe7e3);border-radius:12px;background:#fff;display:flex;flex-direction:column;justify-content:center}.mix-addition-row>div span{font-size:11px;color:var(--muted,#68766e)}.mix-addition-row>div strong{font-size:20px;color:var(--accent-dark,#0b5136)}
+        .mix-help{display:block;margin-top:5px;color:var(--muted,#68766e);font-size:10px}.mix-soil-amount>label{display:block;margin-bottom:5px}.mix-soil-input-row{display:flex;align-items:center;gap:8px}.mix-soil-input-row input{min-width:0;flex:1}.mix-soil-input-row button{flex-shrink:0;white-space:nowrap;padding:9px 11px;font-size:12px}.mix-additions{display:grid;gap:9px}.mix-addition-row{display:grid;grid-template-columns:42px 1fr 1fr;gap:10px;align-items:end;padding:11px;border:1px solid var(--line,#dfe7e3);border-radius:14px;background:#f8fbfa}.mix-addition-row>strong{font-size:22px;color:var(--accent-dark,#0b5136);align-self:center;text-align:center}.mix-addition-row>div{min-height:48px;padding:8px 10px;border:1px solid var(--line,#dfe7e3);border-radius:12px;background:#fff;display:flex;flex-direction:column;justify-content:center}.mix-addition-row>div span{font-size:11px;color:var(--muted,#68766e)}.mix-addition-row>div strong{font-size:20px;color:var(--accent-dark,#0b5136)}
         @media(max-width:760px){.mix-grid-3{grid-template-columns:1fr 1fr}.mix-addition-row{grid-template-columns:36px 1fr 1fr}}
         @media(max-width:560px){.mix-grid-3,.mix-grid-2{grid-template-columns:1fr}.mix-results-3{grid-template-columns:1fr 1fr}.mix-addition-row{grid-template-columns:32px 1fr}.mix-addition-row>div{grid-column:2}.mix-design-dialog .subsection-head{align-items:flex-start}.mix-natural-water-head{align-items:flex-start;flex-direction:column}.mix-moisture-average{width:100%;justify-content:space-between}}
       `;
@@ -534,6 +551,10 @@
     f.addEventListener('change', updatePreview);
     f.addEventListener('submit', saveTest);
     f.elements.specimenType.addEventListener('change', () => { applySpecimenType(); updatePreview(); });
+    document.getElementById('mixResetSoilMass').addEventListener('click', () => {
+      f.elements.batchSoilMass.value = String(specimenDefinition().defaultSoilMass);
+      updatePreview();
+    });
     f.elements.cementChoice.addEventListener('change', toggleManualCement);
     dialog.querySelector('#mixDesignClose').addEventListener('click', () => dialog.close());
     dialog.querySelector('#mixDesignCancel').addEventListener('click', () => dialog.close());
@@ -605,7 +626,8 @@
     f.elements.moldMass.value = test.moldMass ?? '';
     f.elements.moldSoilMass.value = test.moldSoilMass ?? '';
     applySpecimenType();
-    f.elements.batchSoilMass.value = test.batchSoilMass ?? SPECIMEN_TYPES[f.elements.specimenType.value]?.fixedSoilMass ?? 1500;
+    f.elements.batchSoilMass.value = num(test.batchSoilMass) !== null && num(test.batchSoilMass) > 0
+      ? String(test.batchSoilMass) : String(specimenDefinition().defaultSoilMass);
     (test.additions || []).slice(0,3).forEach((row, i) => {
       f.elements[`dosage${i + 1}`].value = row.dosage ?? '';
     });
