@@ -80,7 +80,7 @@
     for(const key of plan){
       const def = TEST_DEFS.find(x=>x.key===String(key));
       if(!def) continue;
-      const done = tests.some(test=>def.types.includes(String(test?.type || '')));
+      const done = tests.some(test=>!test?.draft && def.types.includes(String(test?.type || '')));
       if(!done) pending.push(def.label);
     }
     return {total:plan.length,pending};
@@ -126,7 +126,7 @@
     const hasTests = Array.isArray(project.tests) && project.tests.length > 0;
     const pending = plan.pending;
     const done = Boolean(project.completedAt && completionId(project));
-    const canComplete = hasTests && pending.length === 0;
+    const canComplete = hasTests && pending.length === 0 && !project.tests.some(test=>test?.draft);
     const shared = isShared();
     const notificationDefault = ('Notification' in window) && Notification.permission === 'default';
 
@@ -174,7 +174,7 @@
     try{project = currentProject();}catch{}
     if(!project) return;
     const plan = planStatus(project);
-    if(!Array.isArray(project.tests) || project.tests.length === 0 || plan.pending.length) return;
+    if(!Array.isArray(project.tests) || project.tests.length === 0 || plan.pending.length || project.tests.some(test=>test?.draft)) return;
     if(!confirm(`「${project.name}」の試験を完了として、使用者へ通知しますか？`)) return;
 
     const now = new Date().toISOString();
