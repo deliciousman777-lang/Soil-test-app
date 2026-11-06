@@ -142,6 +142,17 @@
     },true);
   }
 
+  // 破壊スケッチはフォーム要素ではないので、途中保存時に線データも退避する。
+  window.SoilNoteUnconfinedDraft={
+    snapshot:()=>JSON.parse(JSON.stringify(sketchState)),
+    restore:data=>{
+      if(!Array.isArray(data))return;
+      [1,2,3].forEach(i=>{
+        sketchState[i-1]=Array.isArray(data[i-1])?JSON.parse(JSON.stringify(data[i-1])):[];
+        redraw(i);
+      });
+    }
+  };
   installReview();
   inject();
 })();
