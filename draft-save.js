@@ -229,7 +229,7 @@
       dialog?.addEventListener('close',()=>{
         const id=form.dataset.draftTestId;
         if(form.dataset.keepDraftOnClose==='1'){
-          form.dataset.keepDraftOnClose='';form.dataset.finalSubmitPending='';return;
+          form.dataset.keepDraftOnClose='';form.dataset.finalSubmitPending='';form.dataset.draftTestId='';return;
         }
         if(form.dataset.finalSubmitPending==='1'&&id){
           const t=testById(id);
