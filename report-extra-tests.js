@@ -3,6 +3,8 @@
   const finite=v=>Number.isFinite(Number(v));
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
   const f=(v,d=1)=>finite(v)?Number(v).toFixed(d):'';
+  // 液塑性限界の未入力セルは空欄を維持し、保存値は表示時だけ整形する。
+  const attF=(v,d=2)=>v===null||v===undefined||String(v).trim()===''?'':f(v,d);
 
   function project(){
     try{return state.data.projects.find(p=>p.id===state.currentProjectId)||null;}catch{return null;}
@@ -38,10 +40,10 @@
     const plRows=Array.from({length:3},(_,i)=>plastic[i]||{});
     return `<div class="r-section"><div class="r-section-title">液性限界・塑性限界試験 <span class="r-small">JIS A 1205 / JGS 0141</span></div>
       <table class="r-table"><tr><th colspan="7">液性限界</th></tr><tr><th>No.</th><th>落下回数 N</th><th>容器No.</th><th>容器質量 m<sub>c</sub> (g)</th><th>容器＋湿潤土 m<sub>a</sub> (g)</th><th>容器＋乾燥土 m<sub>b</sub> (g)</th><th>w (%)</th></tr>
-      ${llRows.map((r,i)=>`<tr><td>${i+1}</td><td>${f(r.N,0)}</td><td>${esc(r.containerNo||'')}</td><td>${f(r.containerMass,1)}</td><td>${f(r.wetMass,1)}</td><td>${f(r.dryMass,1)}</td><td>${f(r.moisture,1)}</td></tr>`).join('')}</table>
+      ${llRows.map((r,i)=>`<tr><td>${i+1}</td><td>${f(r.N,0)}</td><td>${esc(r.containerNo||'')}</td><td>${attF(r.containerMass,2)}</td><td>${f(r.wetMass,1)}</td><td>${f(r.dryMass,1)}</td><td>${attF(r.moisture,2)}</td></tr>`).join('')}</table>
       <div style="height:5px"></div>
       <table class="r-table"><tr><th colspan="6">塑性限界</th></tr><tr><th>No.</th><th>容器No.</th><th>容器質量 m<sub>c</sub> (g)</th><th>容器＋湿潤土 m<sub>a</sub> (g)</th><th>容器＋乾燥土 m<sub>b</sub> (g)</th><th>w (%)</th></tr>
-      ${plRows.map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.containerNo||'')}</td><td>${f(r.containerMass,1)}</td><td>${f(r.wetMass,1)}</td><td>${f(r.dryMass,1)}</td><td>${f(r.moisture,1)}</td></tr>`).join('')}</table>
+      ${plRows.map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.containerNo||'')}</td><td>${attF(r.containerMass,2)}</td><td>${f(r.wetMass,1)}</td><td>${f(r.dryMass,1)}</td><td>${attF(r.moisture,2)}</td></tr>`).join('')}</table>
       <div class="r-metric-grid" style="grid-template-columns:repeat(4,1fr)">
         <div class="r-metric"><span>液性限界 wL</span><strong>${f(test?.liquidLimit,1)}</strong><span>%</span></div>
         <div class="r-metric"><span>塑性限界 wP</span><strong>${f(test?.plasticLimit,1)}</strong><span>%</span></div>
