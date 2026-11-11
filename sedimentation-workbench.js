@@ -24,17 +24,27 @@
   function current(){
     try{return currentProject?.()||null;}catch{return null;}
   }
+  function readingsComplete(fields){
+    return Boolean(fields?.useSedimentation)
+      &&TIMES.every((_,i)=>String(fields[`sed_r_${i}`]??'').trim()!=='');
+  }
   function isSavedComplete(run){
     const p=projectById(run.projectId);if(!p)return false;
     const sample=String(run.fields?.sample||run.sample||'').trim();
     const container=String(run.fields?.[SAMPLE_CONTAINER]||run.sampleContainerNo||'').trim();
     return (p.tests||[]).some(test=>{
-      if(test.type!=='grain'||!test.sedimentation?.valid
-        ||test.sedimentation.rows?.length!==TIMES.length)return false;
+      if(test.type!=='grain')return false;
+      const finalDone=Boolean(test.sedimentation?.valid
+        &&test.sedimentation.rows?.length===TIMES.length);
+      const draftDone=Boolean(test.draft&&readingsComplete(test.draftFields));
+      if(!finalDone&&!draftDone)return false;
       if(run.grainTestId)return test.id===run.grainTestId;
+      const testContainer=draftDone
+        ?test.draftFields?.[SAMPLE_CONTAINER]
+        :test.sedimentation.settings?.sampleContainerNo;
       return Boolean(sample&&container
         &&String(test.sample||'').trim()===sample
-        &&String(test.sedimentation.settings?.sampleContainerNo||'').trim()===container);
+        &&String(testContainer||'').trim()===container);
     });
   }
 
@@ -150,11 +160,11 @@
   function autosaveCurrent(){
     const form=document.getElementById('grainForm');
     if(!form?.elements?.useSedimentation?.checked)return;
-    // Reopening an already completed result must not create a new active run.
-    const existing=current()?.tests?.find(t=>t.id===state?.editingTestId&&t.type==='grain');
-    if(!activeRunId()&&existing?.sedimentation?.valid
-      &&TIMES.every((_,i)=>String(form.elements[`sed_r_${i}`]?.value??'').trim()!==''))return;
     clearTimeout(saveTimer);
+    // All 8 readings are complete: reopening a draft must not spawn a new run.
+    // Existing active runs may still be updated until the grain draft is saved.
+    if(!activeRunId()&&TIMES.every((_,i)=>
+      String(form.elements[`sed_r_${i}`]?.value??'').trim()!==''))return;
     saveTimer=setTimeout(()=>{
       const run=ensureRun();if(!run)return;
       if(!run.startAt){
@@ -317,6 +327,33 @@
     if(dialog&&!dialog.open)dialog.showModal();
   }
 
+  // Grain draft save has its own persistence path. Once all sedimentation
+  // readings have been saved there, the workbench entry is no longer active.
+  function onGrainDraftSaved(test,fields){
+    if(!test?.id)return;
+    clearTimeout(saveTimer);
+    const form=document.getElementById('grainForm');
+    if(!form)return;
+    if(readingsComplete(fields)){
+      const runs=loadRuns();
+      const activeId=activeRunId();
+      const related=runs.filter(r=>r.projectId===current()?.id
+        &&(r.id===activeId||r.grainTestId===test.id));
+      if(related.length){
+        const ids=new Set(related.map(r=>r.id));
+        saveRuns(runs.filter(r=>!ids.has(r.id)));
+      }
+      delete form.dataset.sedRunId;
+    }else if(fields?.useSedimentation){
+      const run=ensureRun();
+      if(run&&run.grainTestId!==test.id){
+        const runs=loadRuns(),saved=runById(run.id,runs);
+        if(saved){saved.grainTestId=test.id;saveRuns(runs);}
+      }
+    }
+    updateWorkbenchButton();renderWorkbench();
+  }
+
   function removeRun(runId){
     const run=runById(runId);if(!run)return;
     const label=runLabel(run);
@@ -445,6 +482,9 @@
     form?.addEventListener('input',autosaveCurrent);
     form?.addEventListener('change',autosaveCurrent);
     document.getElementById('grainDialog')?.addEventListener('close',()=>{
+      // A completed sedimentation can be part of an unfinished grain draft.
+      // Never start a new progress entry just because that dialog closes.
+      if(form?.dataset?.keepDraftOnClose==='1')return;
       if(activeRunId()&&form?.elements?.useSedimentation?.checked)ensureRun();
     });
     // "Add grain" must open a blank test, not silently restore another run.
@@ -452,5 +492,6 @@
     renderTimer=setInterval(()=>{if(document.getElementById('sedWorkbenchDialog')?.open)renderWorkbench();updateWorkbenchButton();},1000);
   }
 
+  window.SoilNoteSedimentationWorkbench={onGrainDraftSaved};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
