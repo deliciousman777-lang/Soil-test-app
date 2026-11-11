@@ -80,6 +80,9 @@
     const container=String(form.elements[SAMPLE_CONTAINER]?.value||'').trim();
     let run=runById(activeRunId(),runs);
     if(run&&run.projectId!==p.id)run=null;
+    // Switching to a different sample must not overwrite the previous run.
+    if(run&&!editId&&sample&&String(run.fields?.sample||run.sample||'').trim()
+      &&String(run.fields?.sample||run.sample||'').trim()!==sample)run=null;
     // Reuse the same workbench run when editing an existing grain test.
     if(!run&&editId)run=runs.find(r=>r.projectId===p.id&&r.grainTestId===editId)||null;
     if(!run&&sample){
