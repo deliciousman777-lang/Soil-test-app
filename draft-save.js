@@ -177,6 +177,11 @@
     p.updatedAt=now;
     saveData();
     form.dataset.keepDraftOnClose='1';
+    // Completing sedimentation does not mean the whole grain test is complete.
+    // Store the draft, then retire its fully entered sedimentation progress run.
+    if(cfg.type==='grain'){
+      window.SoilNoteSedimentationWorkbench?.onGrainDraftSaved?.(test,fields);
+    }
     document.getElementById(cfg.dialog)?.close();
     state.editingTestId=null;
     renderTests();

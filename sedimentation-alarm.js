@@ -37,6 +37,27 @@
   function startMs(run){const t=new Date(run.startAt||'').getTime();return Number.isFinite(t)?t:null;}
   function readingMissing(run,index){return String(run.fields?.[`sed_r_${index}`]??'').trim()==='';}
   function alarmId(run,index){return `${run.id}:${index}`;}
+  function alreadySaved(run){
+    try{
+      const p=state?.data?.projects?.find(x=>x.id===run.projectId);
+      const runSample=String(run.fields?.sample||run.sample||'').trim();
+      const runContainer=String(run.fields?.sedSampleContainerNo||run.sampleContainerNo||'').trim();
+      return Boolean(p?.tests?.some(t=>{
+        if(t.type!=='grain')return false;
+        const finalDone=Boolean(t.sedimentation?.valid&&t.sedimentation.rows?.length===TIMES.length);
+        const draftDone=Boolean(t.draft&&t.draftFields?.useSedimentation
+          &&TIMES.every((_,i)=>String(t.draftFields[`sed_r_${i}`]??'').trim()!==''));
+        if(!finalDone&&!draftDone)return false;
+        if(run.grainTestId)return t.id===run.grainTestId;
+        const testContainer=draftDone
+          ?t.draftFields?.sedSampleContainerNo
+          :t.sedimentation.settings?.sampleContainerNo;
+        return Boolean(runSample&&runContainer
+          &&String(t.sample||'').trim()===runSample
+          &&String(testContainer||'').trim()===runContainer);
+      }));
+    }catch{return false;}
+  }
 
   function ensureAudio(){
     if(audioCtx)return audioCtx;
@@ -146,17 +167,23 @@
     const now=Date.now();
     const stateMap=alarmState();let changed=false;let newAlarm=false;
     for(const run of runs()){
-      if(run.status==='finished'||!run.startAt)continue;
+      if(run.status==='finished'||!run.startAt||alreadySaved(run))continue;
       const start=startMs(run);if(start==null)continue;
+      const overdue=[];
       for(const i of ALARM_INDEXES){
         if(!readingMissing(run,i))continue;
         const due=start+TIMES[i]*60000;
         if(now<due)continue;
         const id=alarmId(run,i);
         if(stateMap[id]?.firedAt)continue;
-        // 長時間アプリを閉じていた場合も、復帰時に未測定を知らせる。
-        stateMap[id]={firedAt:new Date(now).toISOString(),dueAt:new Date(due).toISOString()};changed=true;
-        triggerAlarm(run,i,due);newAlarm=true;
+        stateMap[id]={firedAt:new Date(now).toISOString(),dueAt:new Date(due).toISOString()};
+        changed=true;overdue.push({index:i,due});
+      }
+      // When reopening after a long absence, announce only the latest missed
+      // measurement for each run rather than firing 5/15/30/... at once.
+      if(overdue.length){
+        const latest=overdue[overdue.length-1];
+        triggerAlarm(run,latest.index,latest.due);newAlarm=true;
       }
     }
     if(changed)saveJson(ALARM_STATE_KEY,stateMap);

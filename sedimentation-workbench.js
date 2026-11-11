@@ -24,6 +24,29 @@
   function current(){
     try{return currentProject?.()||null;}catch{return null;}
   }
+  function readingsComplete(fields){
+    return Boolean(fields?.useSedimentation)
+      &&TIMES.every((_,i)=>String(fields[`sed_r_${i}`]??'').trim()!=='');
+  }
+  function isSavedComplete(run){
+    const p=projectById(run.projectId);if(!p)return false;
+    const sample=String(run.fields?.sample||run.sample||'').trim();
+    const container=String(run.fields?.[SAMPLE_CONTAINER]||run.sampleContainerNo||'').trim();
+    return (p.tests||[]).some(test=>{
+      if(test.type!=='grain')return false;
+      const finalDone=Boolean(test.sedimentation?.valid
+        &&test.sedimentation.rows?.length===TIMES.length);
+      const draftDone=Boolean(test.draft&&readingsComplete(test.draftFields));
+      if(!finalDone&&!draftDone)return false;
+      if(run.grainTestId)return test.id===run.grainTestId;
+      const testContainer=draftDone
+        ?test.draftFields?.[SAMPLE_CONTAINER]
+        :test.sedimentation.settings?.sampleContainerNo;
+      return Boolean(sample&&container
+        &&String(test.sample||'').trim()===sample
+        &&String(testContainer||'').trim()===container);
+    });
+  }
 
   function serializeForm(){
     const form=document.getElementById('grainForm');
@@ -75,7 +98,23 @@
     const p=current();
     if(!form||!p)return null;
     let runs=loadRuns();
+    const editId=state?.editingTestId||'';
+    const sample=String(form.elements.sample?.value||'').trim();
+    const container=String(form.elements[SAMPLE_CONTAINER]?.value||'').trim();
     let run=runById(activeRunId(),runs);
+    if(run&&run.projectId!==p.id)run=null;
+    // Switching to a different sample must not overwrite the previous run.
+    if(run&&!editId&&sample&&String(run.fields?.sample||run.sample||'').trim()
+      &&String(run.fields?.sample||run.sample||'').trim()!==sample)run=null;
+    // Reuse the same workbench run when editing an existing grain test.
+    if(!run&&editId)run=runs.find(r=>r.projectId===p.id&&r.grainTestId===editId)||null;
+    if(!run&&sample){
+      const matches=runs.filter(r=>r.projectId===p.id
+        &&String(r.fields?.sample||r.sample||'').trim()===sample
+        &&String(r.fields?.[SAMPLE_CONTAINER]||r.sampleContainerNo||'').trim()===container
+        &&r.status!=='finished');
+      if(matches.length===1)run=matches[0];
+    }
     if(!run){
       run={
         id:uidLocal(),projectId:p.id,projectName:p.name||'',constructionCardNo:p.constructionCardNo||'',
@@ -85,6 +124,8 @@
       form.dataset.sedRunId=run.id;
     }
     run.projectId=p.id;
+    if(editId)run.grainTestId=editId;
+    form.dataset.sedRunId=run.id;
     run.projectName=p.name||run.projectName||'';
     run.constructionCardNo=p.constructionCardNo||run.constructionCardNo||'';
     run.fields=serializeForm();
@@ -120,6 +161,10 @@
     const form=document.getElementById('grainForm');
     if(!form?.elements?.useSedimentation?.checked)return;
     clearTimeout(saveTimer);
+    // All 8 readings are complete: reopening a draft must not spawn a new run.
+    // Existing active runs may still be updated until the grain draft is saved.
+    if(!activeRunId()&&TIMES.every((_,i)=>
+      String(form.elements[`sed_r_${i}`]?.value??'').trim()!==''))return;
     saveTimer=setTimeout(()=>{
       const run=ensureRun();if(!run)return;
       if(!run.startAt){
@@ -181,7 +226,7 @@
   function updateWorkbenchButton(){
     const btn=document.getElementById('openSedWorkbenchBtn');if(!btn)return;
     const runs=loadRuns();
-    const active=runs.filter(r=>r.status!=='finished').length;
+    const active=runs.filter(r=>r.status!=='finished'&&!isSavedComplete(r)).length;
     btn.textContent=`⏱ 沈降進行中 ${active}`;
     btn.classList.toggle('has-active',active>0);
   }
@@ -204,7 +249,7 @@
 
   function renderWorkbench(){
     const root=document.getElementById('sedWorkbenchList');if(!root)return;
-    const runs=loadRuns().filter(r=>r.status!=='finished');
+    const runs=loadRuns().filter(r=>r.status!=='finished'&&!isSavedComplete(r));
     runs.sort((a,b)=>{
       const ai=nextIndex(a),bi=nextIndex(b);const ad=dueAt(a,ai)??Infinity,bd=dueAt(b,bi)??Infinity;return ad-bd;
     });
@@ -264,10 +309,49 @@
     const p=projectById(run.projectId);if(!p){alert('この沈降分析の工事件名が見つかりません。');return;}
     document.getElementById('sedWorkbenchDialog')?.close();
     try{openProject(p.id);}catch{}
+    // Restore the original grain test edit ID, otherwise submitting creates a second grain test.
+    const sample=String(run.fields?.sample||run.sample||'').trim();
+    const candidates=(p.tests||[]).filter(t=>t.type==='grain'&&String(t.sample||'').trim()===sample);
+    const existing=(p.tests||[]).find(t=>t.type==='grain'&&t.id===run.grainTestId)
+      ||(candidates.length===1?candidates[0]:null);
+    if(existing){
+      const runs=loadRuns();const linked=runById(runId,runs);
+      if(linked&&linked.grainTestId!==existing.id){linked.grainTestId=existing.id;saveRuns(runs);}
+      openEditGrain(existing.id);
+    }else{
+      resetGrainDialog?.();
+    }
     const form=document.getElementById('grainForm');
-    try{resetGrainDialog?.();}catch{}
     if(form){form.dataset.sedRunId=run.id;applyFields(run.fields);}
-    document.getElementById('grainDialog')?.showModal();
+    const dialog=document.getElementById('grainDialog');
+    if(dialog&&!dialog.open)dialog.showModal();
+  }
+
+  // Grain draft save has its own persistence path. Once all sedimentation
+  // readings have been saved there, the workbench entry is no longer active.
+  function onGrainDraftSaved(test,fields){
+    if(!test?.id)return;
+    clearTimeout(saveTimer);
+    const form=document.getElementById('grainForm');
+    if(!form)return;
+    if(readingsComplete(fields)){
+      const runs=loadRuns();
+      const activeId=activeRunId();
+      const related=runs.filter(r=>r.projectId===current()?.id
+        &&(r.id===activeId||r.grainTestId===test.id));
+      if(related.length){
+        const ids=new Set(related.map(r=>r.id));
+        saveRuns(runs.filter(r=>!ids.has(r.id)));
+      }
+      delete form.dataset.sedRunId;
+    }else if(fields?.useSedimentation){
+      const run=ensureRun();
+      if(run&&run.grainTestId!==test.id){
+        const runs=loadRuns(),saved=runById(run.id,runs);
+        if(saved){saved.grainTestId=test.id;saveRuns(runs);}
+      }
+    }
+    updateWorkbenchButton();renderWorkbench();
   }
 
   function removeRun(runId){
@@ -281,7 +365,7 @@
 
   function restoreLatestForCurrentProject(){
     const form=document.getElementById('grainForm');const p=current();if(!form||!p)return;
-    const runs=loadRuns().filter(r=>r.projectId===p.id&&r.status!=='finished').sort((a,b)=>String(b.updatedAt||'').localeCompare(String(a.updatedAt||'')));
+    const runs=loadRuns().filter(r=>r.projectId===p.id&&r.status!=='finished'&&!isSavedComplete(r)).sort((a,b)=>String(b.updatedAt||'').localeCompare(String(a.updatedAt||'')));
     if(runs.length!==1)return;
     const run=runs[0];form.dataset.sedRunId=run.id;applyFields(run.fields);
   }
@@ -306,6 +390,11 @@
         return;
       }
       const p=current();if(!p)return;
+      const activeRun=runById(activeRunId());
+      if(!state?.editingTestId&&activeRun?.grainTestId
+        &&p.tests?.some(t=>t.id===activeRun.grainTestId&&t.type==='grain')){
+        state.editingTestId=activeRun.grainTestId;
+      }
       pendingFinalSubmit={
         projectId:p.id,editId:state?.editingTestId||'',beforeIds:new Set((p.tests||[]).map(t=>t.id)),
         sample:String(form.elements.sample?.value||'').trim(),payload,
@@ -332,6 +421,16 @@
   }
 
   function patchEditAndCards(){
+    if(typeof resetGrainDialog==='function'&&!resetGrainDialog.__sedWorkbenchPatched){
+      const base=resetGrainDialog;
+      const wrapped=function(...args){
+        const result=base(...args);
+        const form=document.getElementById('grainForm');
+        if(form)delete form.dataset.sedRunId;
+        return result;
+      };
+      wrapped.__sedWorkbenchPatched=true;resetGrainDialog=wrapped;
+    }
     if(typeof openEditGrain==='function'&&!openEditGrain.__sedWorkbenchPatched){
       const base=openEditGrain;
       const wrapped=function(testId){
@@ -339,10 +438,14 @@
         const p=current();const t=p?.tests?.find(x=>x.id===testId&&x.type==='grain');
         const form=document.getElementById('grainForm');if(!form||!t)return;
         if(t.sedimentation?.settings?.sampleContainerNo)form.elements[SAMPLE_CONTAINER].value=t.sedimentation.settings.sampleContainerNo;
+        delete form.dataset.sedRunId;
         if(t.sedimentation?.enabled){
-          let runs=loadRuns();let run=runs.find(r=>r.projectId===p.id&&String(r.fields?.sample||'')===String(t.sample||''));
-          if(!run){run={id:uidLocal(),projectId:p.id,projectName:p.name||'',constructionCardNo:p.constructionCardNo||'',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),startAt:null,status:'prepared',fields:serializeForm()};runs.push(run);saveRuns(runs);}
-          form.dataset.sedRunId=run.id;
+          // Viewing a completed saved test is not a new sedimentation run.
+          const runs=loadRuns();
+          const run=runs.find(r=>r.projectId===p.id&&r.grainTestId===t.id)
+            ||runs.find(r=>r.projectId===p.id&&String(r.fields?.sample||'')===String(t.sample||'')
+              &&r.status!=='finished');
+          if(run){run.grainTestId=t.id;form.dataset.sedRunId=run.id;saveRuns(runs);}
         }
       };
       wrapped.__sedWorkbenchPatched=true;openEditGrain=wrapped;
@@ -378,10 +481,17 @@
     const form=document.getElementById('grainForm');
     form?.addEventListener('input',autosaveCurrent);
     form?.addEventListener('change',autosaveCurrent);
-    document.getElementById('grainDialog')?.addEventListener('close',()=>{if(form?.elements?.useSedimentation?.checked)ensureRun();});
-    document.getElementById('addGrainBtn')?.addEventListener('click',()=>setTimeout(()=>{injectSampleContainer();injectStartControl();restoreLatestForCurrentProject();},0));
+    document.getElementById('grainDialog')?.addEventListener('close',()=>{
+      // A completed sedimentation can be part of an unfinished grain draft.
+      // Never start a new progress entry just because that dialog closes.
+      if(form?.dataset?.keepDraftOnClose==='1')return;
+      if(activeRunId()&&form?.elements?.useSedimentation?.checked)ensureRun();
+    });
+    // "Add grain" must open a blank test, not silently restore another run.
+    document.getElementById('addGrainBtn')?.addEventListener('click',()=>setTimeout(()=>{injectSampleContainer();injectStartControl();},0));
     renderTimer=setInterval(()=>{if(document.getElementById('sedWorkbenchDialog')?.open)renderWorkbench();updateWorkbenchButton();},1000);
   }
 
+  window.SoilNoteSedimentationWorkbench={onGrainDraftSaved};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
