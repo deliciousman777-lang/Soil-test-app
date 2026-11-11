@@ -6,6 +6,8 @@
   const NS='http://www.w3.org/2000/svg';
 
   const num=v=>{const s=String(v??'').trim();if(s==='')return null;const n=Number(s);return Number.isFinite(n)?n:null;};
+  // 容器質量は通常0.01g単位で表示。既存の3桁以上の数値は丸めず保持する。
+  const containerMassText=v=>{const raw=String(v??'').trim();if(raw==='')return '';const n=num(raw);if(n===null)return raw;const fraction=raw.split('.')[1]||'';return fraction.length>2?raw:n.toFixed(2);};
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
   const svgEl=(name,attrs={},text='')=>{const e=document.createElementNS(NS,name);Object.entries(attrs).forEach(([k,v])=>e.setAttribute(k,String(v)));if(text!=='')e.textContent=text;return e;};
 
@@ -44,9 +46,9 @@
     document.body.appendChild(d);
 
     const ll=d.querySelector('#llRows');
-    ll.innerHTML=Array.from({length:LL_COUNT},(_,j)=>{const i=j+1;return `<tr><th>${i}</th><td><input name="llN_${i}" inputmode="numeric" placeholder="例：18"></td><td><input name="llNo_${i}" autocomplete="off"></td><td><input name="llC_${i}" inputmode="decimal"></td><td><input name="llWet_${i}" inputmode="decimal"></td><td><input name="llDry_${i}" inputmode="decimal"></td><td id="llW_${i}" class="calc">—</td></tr>`;}).join('');
+    ll.innerHTML=Array.from({length:LL_COUNT},(_,j)=>{const i=j+1;return `<tr><th>${i}</th><td><input name="llN_${i}" inputmode="numeric" placeholder="例：18"></td><td><input name="llNo_${i}" autocomplete="off"></td><td><input name="llC_${i}" inputmode="decimal" placeholder="0.00"></td><td><input name="llWet_${i}" inputmode="decimal"></td><td><input name="llDry_${i}" inputmode="decimal"></td><td id="llW_${i}" class="calc">—</td></tr>`;}).join('');
     const pl=d.querySelector('#plRows');
-    pl.innerHTML=Array.from({length:PL_COUNT},(_,j)=>{const i=j+1;return `<tr><th>${i}</th><td><input name="plNo_${i}" autocomplete="off"></td><td><input name="plC_${i}" inputmode="decimal"></td><td><input name="plWet_${i}" inputmode="decimal"></td><td><input name="plDry_${i}" inputmode="decimal"></td><td id="plW_${i}" class="calc">—</td></tr>`;}).join('');
+    pl.innerHTML=Array.from({length:PL_COUNT},(_,j)=>{const i=j+1;return `<tr><th>${i}</th><td><input name="plNo_${i}" autocomplete="off"></td><td><input name="plC_${i}" inputmode="decimal" placeholder="0.00"></td><td><input name="plWet_${i}" inputmode="decimal"></td><td><input name="plDry_${i}" inputmode="decimal"></td><td id="plW_${i}" class="calc">—</td></tr>`;}).join('');
 
     if(!document.getElementById('atterbergStyles')){
       const s=document.createElement('style');s.id='atterbergStyles';s.textContent=`
@@ -54,6 +56,7 @@
       `;document.head.appendChild(s);
     }
     const f=formEl();f.addEventListener('input',updatePreview);f.addEventListener('change',updatePreview);f.addEventListener('submit',saveTest);
+    f.querySelectorAll('input[name^="llC_"],input[name^="plC_"]').forEach(el=>el.addEventListener('blur',()=>{el.value=containerMassText(el.value); }));
     d.querySelector('#atterbergClose').addEventListener('click',()=>d.close());d.querySelector('#atterbergCancel').addEventListener('click',()=>d.close());
   }
 
@@ -96,8 +99,8 @@
 
   function updatePreview(){
     const a=calcAll();
-    for(let i=1;i<=LL_COUNT;i++){const r=a.ll[i-1],el=document.getElementById(`llW_${i}`);if(el)el.textContent=r.valid?`${r.moisture.toFixed(1)} %`:'—';}
-    for(let i=1;i<=PL_COUNT;i++){const r=a.pl[i-1],el=document.getElementById(`plW_${i}`);if(el)el.textContent=r.valid?`${r.moisture.toFixed(1)} %`:'—';}
+    for(let i=1;i<=LL_COUNT;i++){const r=a.ll[i-1],el=document.getElementById(`llW_${i}`);if(el)el.textContent=r.valid?`${r.moisture.toFixed(2)} %`:'—';}
+    for(let i=1;i<=PL_COUNT;i++){const r=a.pl[i-1],el=document.getElementById(`plW_${i}`);if(el)el.textContent=r.valid?`${r.moisture.toFixed(2)} %`:'—';}
     document.getElementById('attWL').textContent=a.wL!==null?a.wL.toFixed(1):'—';
     document.getElementById('attWP').textContent=a.wP!==null?a.wP.toFixed(1):'—';
     document.getElementById('attIP').textContent=a.ip!==null?a.ip.toFixed(1):'—';
@@ -128,8 +131,8 @@
   function openNew(){resetForm();dialogEl().showModal();}
   function openEdit(id){
     const p=currentProject(),t=p?.tests.find(x=>x.id===id&&x.type===TYPE);if(!t)return;state.editingTestId=id;formEl().reset();formEl().elements.sample.value=t.sample||'';
-    (t.liquid||[]).slice(0,LL_COUNT).forEach((r,j)=>{const i=j+1;formEl().elements[`llN_${i}`].value=r.N??'';formEl().elements[`llNo_${i}`].value=r.containerNo??'';formEl().elements[`llC_${i}`].value=r.containerMass??'';formEl().elements[`llWet_${i}`].value=r.wetMass??'';formEl().elements[`llDry_${i}`].value=r.dryMass??'';});
-    (t.plastic||[]).slice(0,PL_COUNT).forEach((r,j)=>{const i=j+1;formEl().elements[`plNo_${i}`].value=r.containerNo??'';formEl().elements[`plC_${i}`].value=r.containerMass??'';formEl().elements[`plWet_${i}`].value=r.wetMass??'';formEl().elements[`plDry_${i}`].value=r.dryMass??'';});
+    (t.liquid||[]).slice(0,LL_COUNT).forEach((r,j)=>{const i=j+1;formEl().elements[`llN_${i}`].value=r.N??'';formEl().elements[`llNo_${i}`].value=r.containerNo??'';formEl().elements[`llC_${i}`].value=containerMassText(r.containerMass);formEl().elements[`llWet_${i}`].value=r.wetMass??'';formEl().elements[`llDry_${i}`].value=r.dryMass??'';});
+    (t.plastic||[]).slice(0,PL_COUNT).forEach((r,j)=>{const i=j+1;formEl().elements[`plNo_${i}`].value=r.containerNo??'';formEl().elements[`plC_${i}`].value=containerMassText(r.containerMass);formEl().elements[`plWet_${i}`].value=r.wetMass??'';formEl().elements[`plDry_${i}`].value=r.dryMass??'';});
     document.getElementById('atterbergTitle').textContent='液性限界・塑性限界試験を訂正';document.getElementById('atterbergSubmit').textContent='訂正を保存';updatePreview();dialogEl().showModal();
   }
 
