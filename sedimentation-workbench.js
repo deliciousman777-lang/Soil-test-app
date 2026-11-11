@@ -24,6 +24,19 @@
   function current(){
     try{return currentProject?.()||null;}catch{return null;}
   }
+  function isSavedComplete(run){
+    const p=projectById(run.projectId);if(!p)return false;
+    const sample=String(run.fields?.sample||run.sample||'').trim();
+    const container=String(run.fields?.[SAMPLE_CONTAINER]||run.sampleContainerNo||'').trim();
+    return (p.tests||[]).some(test=>{
+      if(test.type!=='grain'||!test.sedimentation?.valid
+        ||test.sedimentation.rows?.length!==TIMES.length)return false;
+      if(run.grainTestId)return test.id===run.grainTestId;
+      return Boolean(sample&&container
+        &&String(test.sample||'').trim()===sample
+        &&String(test.sedimentation.settings?.sampleContainerNo||'').trim()===container);
+    });
+  }
 
   function serializeForm(){
     const form=document.getElementById('grainForm');
@@ -203,7 +216,7 @@
   function updateWorkbenchButton(){
     const btn=document.getElementById('openSedWorkbenchBtn');if(!btn)return;
     const runs=loadRuns();
-    const active=runs.filter(r=>r.status!=='finished').length;
+    const active=runs.filter(r=>r.status!=='finished'&&!isSavedComplete(r)).length;
     btn.textContent=`⏱ 沈降進行中 ${active}`;
     btn.classList.toggle('has-active',active>0);
   }
@@ -226,7 +239,7 @@
 
   function renderWorkbench(){
     const root=document.getElementById('sedWorkbenchList');if(!root)return;
-    const runs=loadRuns().filter(r=>r.status!=='finished');
+    const runs=loadRuns().filter(r=>r.status!=='finished'&&!isSavedComplete(r));
     runs.sort((a,b)=>{
       const ai=nextIndex(a),bi=nextIndex(b);const ad=dueAt(a,ai)??Infinity,bd=dueAt(b,bi)??Infinity;return ad-bd;
     });
@@ -315,7 +328,7 @@
 
   function restoreLatestForCurrentProject(){
     const form=document.getElementById('grainForm');const p=current();if(!form||!p)return;
-    const runs=loadRuns().filter(r=>r.projectId===p.id&&r.status!=='finished').sort((a,b)=>String(b.updatedAt||'').localeCompare(String(a.updatedAt||'')));
+    const runs=loadRuns().filter(r=>r.projectId===p.id&&r.status!=='finished'&&!isSavedComplete(r)).sort((a,b)=>String(b.updatedAt||'').localeCompare(String(a.updatedAt||'')));
     if(runs.length!==1)return;
     const run=runs[0];form.dataset.sedRunId=run.id;applyFields(run.fields);
   }
