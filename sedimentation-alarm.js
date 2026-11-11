@@ -43,11 +43,18 @@
       const runSample=String(run.fields?.sample||run.sample||'').trim();
       const runContainer=String(run.fields?.sedSampleContainerNo||run.sampleContainerNo||'').trim();
       return Boolean(p?.tests?.some(t=>{
-        if(t.type!=='grain'||!t.sedimentation?.valid||t.sedimentation.rows?.length!==TIMES.length)return false;
+        if(t.type!=='grain')return false;
+        const finalDone=Boolean(t.sedimentation?.valid&&t.sedimentation.rows?.length===TIMES.length);
+        const draftDone=Boolean(t.draft&&t.draftFields?.useSedimentation
+          &&TIMES.every((_,i)=>String(t.draftFields[`sed_r_${i}`]??'').trim()!==''));
+        if(!finalDone&&!draftDone)return false;
         if(run.grainTestId)return t.id===run.grainTestId;
+        const testContainer=draftDone
+          ?t.draftFields?.sedSampleContainerNo
+          :t.sedimentation.settings?.sampleContainerNo;
         return Boolean(runSample&&runContainer
           &&String(t.sample||'').trim()===runSample
-          &&String(t.sedimentation.settings?.sampleContainerNo||'').trim()===runContainer);
+          &&String(testContainer||'').trim()===runContainer);
       }));
     }catch{return false;}
   }
