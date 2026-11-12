@@ -21,6 +21,70 @@
     return Number.isNaN(d.getTime())?esc(v):d.toLocaleDateString('ja-JP');
   };
 
+
+  // 「途中保存」は完成データ本体ではなく draftFields に記録される。
+  // 入力済みの値を確認画面に読み戻し、質量・湿潤密度・配合作製量を再計算する。
+  function present(test){
+    if(!test?.draft || !test.draftFields)return test;
+    const f=test.draftFields;
+    const asNum=v=>finite(v)?Number(v):null;
+    const specimenType=f.specimenType||test.specimenType||'unconfined';
+    const def=SPEC[specimenType]||SPEC.unconfined;
+    const required=specimenType==='unconfined'?3:1;
+    const naturalWaterMeasurements=[1,2,3].map(i=>{
+      const containerNo=String(f['naturalContainerNo'+i]??'');
+      const wetMass=asNum(f['naturalWetMass'+i]);
+      const dryMass=asNum(f['naturalDryMass'+i]);
+      const containerMass=asNum(f['naturalContainerMass'+i]);
+      const valid=wetMass!==null&&dryMass!==null&&containerMass!==null&&wetMass>=dryMass&&dryMass>containerMass;
+      return {containerNo,wetMass,dryMass,containerMass,
+        moisture:valid?(wetMass-dryMass)/(dryMass-containerMass)*100:null};
+    }).filter(r=>r.containerNo!==''||r.wetMass!==null||r.dryMass!==null||r.containerMass!==null);
+    const validWater=naturalWaterMeasurements.filter(r=>finite(r.moisture));
+    const naturalWaterContent=validWater.length
+      ? validWater.reduce((sum,r)=>sum+r.moisture,0)/validWater.length:null;
+    const densityMeasurements=Array.from({length:required},(_,index)=>{
+      const i=index+1;
+      const moldMass=asNum(f['densityMoldMass'+i]);
+      const moldSoilMass=asNum(f['densityMoldSoilMass'+i]);
+      const soilMass=moldMass!==null&&moldSoilMass!==null&&moldSoilMass>moldMass?moldSoilMass-moldMass:null;
+      return {moldMass,moldSoilMass,soilMass,wetDensity:soilMass!==null?soilMass/def.volume:null};
+    }).filter(r=>r.moldMass!==null||r.moldSoilMass!==null);
+    const validDensities=densityMeasurements.filter(r=>finite(r.wetDensity));
+    const wetDensity=validDensities.length===required
+      ? validDensities.reduce((sum,r)=>sum+r.wetDensity,0)/required:null;
+    const batchSoilMass=asNum(f.batchSoilMass);
+    const batchVolume=wetDensity!==null&&wetDensity>0&&batchSoilMass!==null&&batchSoilMass>0
+      ? batchSoilMass/wetDensity:null;
+    const cementName=f.cementChoice==='__manual__'?f.cementManual:f.cementChoice;
+    const additions=[1,2,3].map(i=>{
+      const dosage=asNum(f['dosage'+i]);
+      return {dosage,cementMass:dosage!==null&&batchVolume!==null?(dosage/1000)*batchVolume:null};
+    });
+    return {...test,
+      sample:f.sample||test.sample,
+      specimenType,
+      naturalWaterMeasurements,
+      naturalWaterContent,
+      cementName:cementName||'',
+      specimenDate:f.specimenDate||'',
+      compressionDate:f.compressionDate||'',
+      preparationMethod:f.preparationMethod||'',
+      preparationMethodLabel:PREP[f.preparationMethod]||f.preparationMethod||'',
+      curing:{airDays:asNum(f.airCuringDays),waterDays:asNum(f.waterCuringDays)},
+      moldVolume:def.volume,
+      moldMass:null,
+      moldSoilMass:null,
+      soilMass:null,
+      densityMeasurements,
+      densityMeasurementCount:required,
+      wetDensity,
+      batchSoilMass,
+      batchVolume,
+      additions,
+    };
+  }
+
   function density(test){
     const def=SPEC[test.specimenType]||SPEC.unconfined;
     let rows=Array.isArray(test.densityMeasurements)?test.densityMeasurements.map(r=>({...r})):[];
@@ -33,7 +97,8 @@
       return {moldMass,moldSoilMass,soilMass,wetDensity};
     }).filter(r=>r.moldMass!==null||r.moldSoilMass!==null);
     const vals=rows.map(r=>r.wetDensity).filter(finite).map(Number);
-    const average=finite(test.wetDensity)?Number(test.wetDensity):(vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:null);
+    const needed=test.draft?(test.specimenType==='unconfined'?3:1):0;
+    const average=needed&&vals.length<needed?null:(finite(test.wetDensity)?Number(test.wetDensity):(vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:null));
     return {rows,average,volume:finite(test.moldVolume)?Number(test.moldVolume):def.volume};
   }
 
@@ -61,7 +126,8 @@
     `;document.head.appendChild(s);
   }
 
-  function html(test){
+  function html(savedTest){
+    const test=present(savedTest);
     ensureStyles();
     const def=SPEC[test.specimenType]||SPEC.unconfined;
     const d=density(test);
@@ -71,14 +137,14 @@
     const densityRows=d.rows.map((r,i)=>`<tr><th>測定 ${i+1}</th><td>${num(r.moldMass,1)} g</td><td>${num(r.moldSoilMass,1)} g</td><td>${num(r.soilMass,1)} g</td><td><strong>${num(r.wetDensity,3)} g/cm³</strong></td></tr>`).join('');
     const moisture=moistureRows(test);
     const adds=a.rows.map(r=>`<div class="mix-review-add"><span>パターン ${r.index}</span><strong>${num(r.dosage,0)} kg/m³</strong><span>必要セメント量</span><strong>${num(r.cementMass,1)} g</strong></div>`).join('');
-    return `<p class="review-meta">試料：${esc(test.sample||'—')}</p>
+    return `<p class="review-meta">試料：${esc(test.sample||'—')}${test.draft?' ｜ 途中保存（入力済みデータ）':''}</p>
       <div class="review-summary"><div><span>自然含水比 wn</span><strong>${num(test.naturalWaterContent,1)} %</strong></div><div><span>平均湿潤密度 ρt</span><strong>${num(d.average,3)}</strong><small>g/cm³</small></div><div><span>供試体</span><strong style="font-size:15px">${esc(def.label)}</strong></div></div>
       <section class="review-section"><h3>供試体作製条件</h3><div class="mix-review-grid"><div class="mix-review-card"><span>使用セメント</span><strong>${esc(test.cementName||'—')}</strong></div><div class="mix-review-card"><span>供試体作製日</span><strong>${date(test.specimenDate)}</strong></div><div class="mix-review-card"><span>圧縮日 / 試験日</span><strong>${date(test.compressionDate)}</strong></div><div class="mix-review-card mix-review-wide"><span>供試体作製条件</span><strong>${esc(prep)}</strong></div><div class="mix-review-card"><span>空気養生</span><strong>${num(curing.airDays,0)} 日</strong></div><div class="mix-review-card"><span>水浸養生</span><strong>${num(curing.waterDays,0)} 日</strong></div></div></section>
       <section class="review-section"><h3>自然含水比</h3><div class="mix-review-scroll"><table class="mix-review-table"><thead><tr><th>測定</th><th>容器No.</th><th>容器＋湿潤土</th><th>容器＋乾燥土</th><th>容器</th><th>w</th></tr></thead><tbody>${moisture||'<tr><td colspan="6">保存データなし</td></tr>'}</tbody></table></div></section>
       <section class="review-section"><h3>湿潤密度</h3><div class="mix-review-scroll"><table class="mix-review-table"><thead><tr><th>測定</th><th>モールド</th><th>モールド＋土</th><th>土の質量</th><th>ρt</th></tr></thead><tbody>${densityRows||'<tr><td colspan="5">保存データなし</td></tr>'}</tbody></table></div><p class="review-meta">モールド体積 ${num(d.volume,1)} cm³ ｜ 採用湿潤密度 ${num(d.average,3)} g/cm³</p></section>
       <section class="review-section"><h3>配合作製量</h3><div class="mix-review-grid"><div class="mix-review-card"><span>使用土量</span><strong>${num(a.batchSoilMass,0)} g</strong></div><div class="mix-review-card"><span>配合作製体積</span><strong>${num(a.batchVolume,1)} cm³</strong></div></div></section>
       <section class="review-section"><h3>添加量 3パターン</h3><div class="mix-review-adds">${adds}</div></section>
-      <div class="review-note">確認画面には入力した3点湿潤密度・供試体作製条件・3配合を表示します。</div>`;
+      <div class="review-note">${test.draft?'途中保存した入力値を表示しています。未入力の項目は「—」です。「続き」から入力を再開できます。':'確認画面には入力した3点湿潤密度・供試体作製条件・3配合を表示します。'}</div>`;
   }
 
   window.addEventListener('click',event=>{
