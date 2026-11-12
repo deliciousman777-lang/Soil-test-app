@@ -91,8 +91,9 @@
     const needed = requiredCount();
     const all = rows();
     all.forEach(row => {
-      setText(`mixDensitySoilMass${row.index}`, row.soilMass !== null && row.soilMass > 0 ? `${row.soilMass.toFixed(1)} g` : '—');
-      setText(`mixDensityValue${row.index}`, row.wetDensity !== null ? `${row.wetDensity.toFixed(3)} g/cm³` : '—');
+      const missing = row.status === 'incomplete' ? '入力途中' : row.status === 'invalid' ? '確認' : '—';
+      setText(`mixDensitySoilMass${row.index}`, row.soilMass !== null && row.soilMass > 0 ? `${row.soilMass.toFixed(1)} g` : missing);
+      setText(`mixDensityValue${row.index}`, row.wetDensity !== null ? `${row.wetDensity.toFixed(3)} g/cm³` : missing);
     });
 
     const activeRows = all.slice(0, needed);
@@ -135,10 +136,10 @@
     return `
       <div class="mix-density-row" data-density-row="${index}">
         <strong>${index}</strong>
-        <input name="densityMoldMass${index}" inputmode="decimal" autocomplete="off" placeholder="g" aria-label="モールド質量 ${index}">
-        <input name="densityMoldSoilMass${index}" inputmode="decimal" autocomplete="off" placeholder="g" aria-label="モールド＋土質量 ${index}">
-        <span id="mixDensitySoilMass${index}">—</span>
-        <span id="mixDensityValue${index}">—</span>
+        <label class="mix-density-input"><small>モールド質量 (g)</small><input name="densityMoldMass${index}" inputmode="decimal" autocomplete="off" placeholder="g" aria-label="モールド質量 ${index}"></label>
+        <label class="mix-density-input"><small>モールド＋土質量 (g)</small><input name="densityMoldSoilMass${index}" inputmode="decimal" autocomplete="off" placeholder="g" aria-label="モールド＋土質量 ${index}"></label>
+        <span id="mixDensitySoilMass${index}" data-label="土の質量">—</span>
+        <span id="mixDensityValue${index}" data-label="湿潤密度 ρt">—</span>
       </div>`;
   }
 
@@ -169,14 +170,42 @@
       const style=document.createElement('style');
       style.id='mixDensityThreeStyle';
       style.textContent=`
-        .mix-density-legacy-hidden{display:none!important}.mix-density-three{margin-top:10px}.mix-density-three-head,.mix-density-row{display:grid;grid-template-columns:44px 1fr 1fr 130px 150px;gap:7px;align-items:center}.mix-density-three-head{padding:0 4px 5px;color:var(--muted,#68766e);font-size:10px}.mix-density-row{margin-bottom:7px}.mix-density-row>strong{display:flex;align-items:center;justify-content:center;height:46px;border-radius:11px;background:#eef4f1;color:var(--accent-dark,#0b5136)}.mix-density-row>span{display:flex;align-items:center;justify-content:center;min-height:46px;border:1px solid var(--line,#dfe7e3);border-radius:11px;background:#f8fbfa;font-weight:800;color:var(--accent-dark,#0b5136);font-size:13px}.mix-density-average{margin-top:9px;display:flex;align-items:center;justify-content:space-between;padding:11px 13px;border-radius:12px;background:#eaf5ef;border:1px solid #b9dec9}.mix-density-average span{font-size:12px;color:#53605d}.mix-density-average strong{font-size:22px;color:var(--accent-dark,#0b5136)}@media(max-width:720px){.mix-density-three{overflow-x:auto;padding-bottom:2px}.mix-density-three-head,.mix-density-row{min-width:720px}}
+        .mix-density-legacy-hidden{display:none!important}
+        .mix-density-three{margin-top:10px}
+        .mix-density-three-head,.mix-density-row{display:grid;grid-template-columns:44px minmax(0,1fr) minmax(0,1fr) 130px 150px;gap:7px;align-items:center}
+        .mix-density-three-head{padding:0 4px 5px;color:var(--muted,#68766e);font-size:10px}
+        .mix-density-row{margin-bottom:7px}
+        .mix-density-row>strong{display:flex;align-items:center;justify-content:center;height:46px;border-radius:11px;background:#eef4f1;color:var(--accent-dark,#0b5136)}
+        .mix-density-input{display:block;min-width:0}
+        .mix-density-input small{display:none}
+        .mix-density-input input{width:100%;min-width:0;box-sizing:border-box}
+        .mix-density-row>span{display:flex;align-items:center;justify-content:center;min-height:46px;border:1px solid var(--line,#dfe7e3);border-radius:11px;background:#f8fbfa;font-weight:800;color:var(--accent-dark,#0b5136);font-size:13px}
+        .mix-density-row>span::before{display:none}
+        .mix-density-average{margin-top:9px;display:flex;align-items:center;justify-content:space-between;padding:11px 13px;border-radius:12px;background:#eaf5ef;border:1px solid #b9dec9}
+        .mix-density-average span{font-size:12px;color:#53605d}
+        .mix-density-average strong{font-size:22px;color:var(--accent-dark,#0b5136)}
+        @media(max-width:720px){
+          .mix-density-three{overflow-x:visible}
+          .mix-density-three-head{display:none}
+          .mix-density-row{grid-template-columns:34px minmax(0,1fr) minmax(0,1fr);grid-template-areas:"num mold total" "num soil wet";min-width:0;padding:9px;border:1px solid var(--line,#dfe7e3);border-radius:12px;gap:8px}
+          .mix-density-row>strong{grid-area:num;height:100%;min-height:104px}
+          .mix-density-row>label:nth-of-type(1){grid-area:mold}
+          .mix-density-row>label:nth-of-type(2){grid-area:total}
+          .mix-density-row>span:nth-of-type(1){grid-area:soil}
+          .mix-density-row>span:nth-of-type(2){grid-area:wet}
+          .mix-density-input small{display:block;margin-bottom:4px;font-size:10px;color:var(--muted,#68766e);line-height:1.3}
+          .mix-density-row>span{flex-direction:column;align-items:flex-start;padding:6px 8px;min-height:48px;font-size:14px;box-sizing:border-box;overflow-wrap:anywhere}
+          .mix-density-row>span::before{content:attr(data-label);display:block;font-size:10px;font-weight:400;color:var(--muted,#68766e);margin-bottom:2px}
+        }
       `;
       document.head.appendChild(style);
     }
 
     [1,2,3].forEach(i=>{
-      rowInput(i,'MoldMass')?.addEventListener('input', update);
-      rowInput(i,'MoldSoilMass')?.addEventListener('input', update);
+      for (const kind of ['MoldMass','MoldSoilMass']) {
+        rowInput(i,kind)?.addEventListener('input', update);
+        rowInput(i,kind)?.addEventListener('change', update);
+      }
     });
     f.elements.specimenType?.addEventListener('change',()=>{
       const needed=requiredCount();
