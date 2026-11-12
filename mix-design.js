@@ -281,8 +281,14 @@
       ? naturalWaterMeasurements.reduce((sum, row) => sum + row.moisture, 0) / naturalWaterMeasurements.length
       : null;
 
-    const moldMass = num(f.elements.moldMass.value);
-    const moldSoilMass = num(f.elements.moldSoilMass.value);
+    // 3点の入力値から採用平均を直接計算し、隠れた旧欄の値を誤表示しない。
+    const threePoint = document.getElementById('mixDensityThreeTable');
+    const densityRows = threePoint ? window.SoilNoteMixDensity3?.getMeasurements?.() || [] : [];
+    const needed = threePoint ? window.SoilNoteMixDensity3?.getRequiredCount?.() || 3 : 0;
+    const complete = Boolean(threePoint && densityRows.length === needed);
+    const mean = key => densityRows.reduce((total, row) => total + row[key], 0) / needed;
+    const moldMass = threePoint ? (complete ? mean('moldMass') : null) : num(f.elements.moldMass.value);
+    const moldSoilMass = threePoint ? (complete ? mean('moldSoilMass') : null) : num(f.elements.moldSoilMass.value);
     const batchSoilMass = num(f.elements.batchSoilMass.value);
     const soilMass = moldMass !== null && moldSoilMass !== null ? moldSoilMass - moldMass : null;
     const wetDensity = soilMass !== null && soilMass > 0 ? soilMass / moldVolume : null;
