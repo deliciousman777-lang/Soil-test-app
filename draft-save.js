@@ -206,6 +206,8 @@
     }
     form.dispatchEvent(new Event('input',{bubbles:true}));
     form.dispatchEvent(new Event('change',{bubbles:true}));
+    // 途中保存から戻した3点の湿潤密度を個別表示・平均表示にも即反映する。
+    if(cfg.type==='mix-design') window.SoilNoteMixDensity3?.update?.();
   }
 
   function ensureDraftButtons(){

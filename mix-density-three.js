@@ -201,6 +201,14 @@
       document.head.appendChild(style);
     }
 
+    // 途中保存の復元は入力欄へ値を直接設定してフォーム自身にイベントを送る。
+    // 各入力欄のイベントは発火しないため、ここでも3点表示を再計算する。
+    const refreshRestoredFields = event => {
+      if (event.target === f) update();
+    };
+    f.addEventListener('input', refreshRestoredFields);
+    f.addEventListener('change', refreshRestoredFields);
+
     [1,2,3].forEach(i=>{
       for (const kind of ['MoldMass','MoldSoilMass']) {
         rowInput(i,kind)?.addEventListener('input', update);
