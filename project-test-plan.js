@@ -7,7 +7,7 @@
   const PLAN_FIELD = 'plannedTestType';
   const TEST_GROUPS = [
     { key:'physical', label:'物理試験', icon:'📁', tests:['particleDensity','moisture','grain','atterberg'] },
-    { key:'mechanical', label:'力学試験', icon:'📁', tests:['compaction','cone-index'] },
+    { key:'mechanical', label:'力学試験', icon:'📁', tests:['compaction','cone-index','unconfined-compression','mix-design'] },
   ];
   const TEST_DEFS = [
     { key:'particleDensity', label:'土粒子の密度', types:['particleDensity'], group:'physical' },
@@ -16,6 +16,8 @@
     { key:'atterberg', label:'液性・塑性限界', types:['atterberg'], group:'physical' },
     { key:'compaction', label:'締め固め', types:['compaction'], group:'mechanical' },
     { key:'cone-index', label:'コーン指数', types:['cone-index'], group:'mechanical' },
+    { key:'unconfined-compression', label:'一軸圧縮試験', types:['unconfined-compression'], group:'mechanical' },
+    { key:'mix-design', label:'配合試験', types:['mix-design'], group:'mechanical' },
   ];
   const VALID_KEYS = new Set(TEST_DEFS.map(x=>x.key));
 
