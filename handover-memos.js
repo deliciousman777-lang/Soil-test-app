@@ -97,6 +97,7 @@
     if(author)localStorage.setItem(NAME_KEY,author);
     resetEditor();
     renderList();
+    document.dispatchEvent(new CustomEvent('soilnote:memo-saved',{detail:{id,scope:currentScope}}));
     setStatus(currentScope==='local'?'端末に保存しました。':'端末に保存しました。クラウドへ同期中…','ok');
     queueSync();
   }
@@ -123,6 +124,7 @@
       if(!persist())return;
       if(editingId===memo.id)resetEditor();
       renderList();
+      document.dispatchEvent(new CustomEvent('soilnote:memo-deleted',{detail:{id:memo.id,scope:currentScope}}));
       setStatus('メモを削除しました。','ok');
       queueSync();
     }
@@ -279,6 +281,7 @@
         if(res.error)throw res.error;
       }
       setStatus('共有メモ同期済み（端末にも保存）','ok');
+      document.dispatchEvent(new CustomEvent('soilnote:memo-cloud-synced',{detail:{scope:active}}));
     }catch(e){
       console.error('[SoilNote Memo] sync',e);
       setStatus('共有メモの同期に失敗しました。入力内容は端末に保存されています。','error');
