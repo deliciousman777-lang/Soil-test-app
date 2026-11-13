@@ -58,6 +58,7 @@
   }
   function renderList(){
     if(!list)return;
+    updateLauncherCount();
     const items=Object.values(bucket()).filter(x=>x&&!x.deletedAt&&x.body).sort((a,b)=>String(b.updatedAt).localeCompare(String(a.updatedAt)));
     if(!items.length){
       list.innerHTML='<p class="sn-memo-empty">まだメモがありません。引き継ぎや連絡事項などを自由に記録できます。</p>';
@@ -126,13 +127,37 @@
       queueSync();
     }
   }
+
+  function updateLauncherCount(){
+    const counter=document.getElementById('soilnoteMemoCount');
+    if(!counter)return;
+    const count=Object.values(bucket()).filter(x=>x&&!x.deletedAt&&x.body).length;
+    counter.textContent=count?count+'件':'';
+    counter.hidden=!count;
+  }
+
   function makeUI(){
     const host=document.getElementById('projectView');
-    if(!host||document.getElementById('soilnoteMemoBoard'))return;
-    section=document.createElement('section');
-    section.id='soilnoteMemoBoard';
-    section.className='sn-memo-board';
-    section.innerHTML=[
+    if(!host||document.getElementById('soilnoteMemoOpen'))return;
+
+    // トップは一行のボタンだけ。入力と一覧は専用の全画面で表示する。
+    const launcher=document.createElement('div');
+    launcher.className='sn-memo-launcher';
+    launcher.innerHTML='<button type="button" class="sn-memo-open" id="soilnoteMemoOpen" aria-haspopup="dialog"><span aria-hidden="true">📝</span><span>引き継ぎメモ</span><small id="soilnoteMemoCount" hidden></small><span class="sn-memo-chevron" aria-hidden="true">›</span></button>';
+    host.insertBefore(launcher,host.firstChild);
+
+    const dialog=document.createElement('dialog');
+    dialog.id='soilnoteMemoBoard';
+    dialog.className='sn-memo-dialog';
+    dialog.setAttribute('aria-labelledby','soilnoteMemoPageTitle');
+    dialog.innerHTML=[
+      '<div class="sn-memo-page">',
+      '<header class="sn-memo-page-header"><div class="sn-memo-header-inner">',
+      '<button type="button" class="sn-memo-back" id="soilnoteMemoBack">← 戻る</button>',
+      '<strong id="soilnoteMemoPageTitle">引き継ぎメモ</strong>',
+      '</div></header>',
+      '<div class="sn-memo-page-inner">',
+      '<section class="sn-memo-board">',
       '<div class="sn-memo-heading"><div><p class="eyebrow">SHARED NOTES</p><h2>引き継ぎ・連絡メモ</h2><p>試験の引き継ぎや注意事項、その他のメモを自由に残せます。</p></div><span class="sn-memo-mark">📝</span></div>',
       '<form id="soilnoteMemoForm" class="sn-memo-form">',
       '<label>件名（任意）<input name="title" maxlength="120" autocomplete="off" placeholder="例：CBR試験の引き継ぎ"></label>',
@@ -142,13 +167,25 @@
       '</form>',
       '<div class="sn-memo-status" id="soilnoteMemoStatus" role="status"></div>',
       '<div class="sn-memo-list-heading"><h3>保存済みメモ</h3><button id="soilnoteMemoRefresh" type="button" class="ghost">更新</button></div>',
-      '<div id="soilnoteMemoList" class="sn-memo-list"></div>'
+      '<div id="soilnoteMemoList" class="sn-memo-list"></div>',
+      '</section></div></div>'
     ].join('');
-    host.insertBefore(section,host.firstChild);
+    document.body.appendChild(dialog);
+
     const style=document.createElement('style');
     style.id='soilnoteMemoStyles';
     style.textContent=[
-      '.sn-memo-board{margin:0 0 24px;background:#fff;border:1px solid var(--line,#dfe7e4);border-radius:18px;padding:18px;box-shadow:0 4px 18px rgba(24,38,34,.04)}',
+      '.sn-memo-launcher{margin:0 0 16px}',
+      '.sn-memo-open{display:inline-flex;align-items:center;gap:8px;max-width:100%;padding:10px 14px;border:1px solid #cbdcd5;border-radius:11px;background:#fff;color:var(--accent-dark,#155343);font-weight:800;font-size:14px;box-shadow:0 2px 8px rgba(24,38,34,.04);cursor:pointer}',
+      '.sn-memo-open:active{background:#eaf5ef}.sn-memo-open small{font-size:11px;color:#fff;background:var(--accent,#1e6f5c);border-radius:999px;padding:2px 7px}.sn-memo-chevron{font-size:21px;font-weight:400;line-height:1;color:#7c958b}',
+      '.sn-memo-dialog{position:fixed;inset:0;margin:0;width:100%;max-width:none;height:100dvh;max-height:none;border:0;border-radius:0;overflow:auto;background:#f4f7f6;color:#17211f;padding:0;overscroll-behavior:contain}',
+      '.sn-memo-dialog::backdrop{background:rgba(12,20,18,.4)}',
+      '.sn-memo-page{min-height:100%;padding-bottom:env(safe-area-inset-bottom,0px)}',
+      '.sn-memo-page-header{position:sticky;top:0;z-index:3;border-bottom:1px solid #dfe7e4;background:rgba(244,247,246,.97);backdrop-filter:blur(10px);padding:calc(10px + env(safe-area-inset-top,0px)) 16px 10px}',
+      '.sn-memo-header-inner{max-width:820px;margin:auto;display:flex;align-items:center;gap:16px;font-size:17px}',
+      '.sn-memo-back{border:0;background:transparent;color:#155343;font-size:14px;font-weight:800;padding:7px 0;cursor:pointer;white-space:nowrap}',
+      '.sn-memo-page-inner{max-width:820px;margin:auto;padding:18px 16px 32px}',
+      '.sn-memo-board{background:#fff;border:1px solid var(--line,#dfe7e4);border-radius:18px;padding:18px;box-shadow:0 4px 18px rgba(24,38,34,.04)}',
       '.sn-memo-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;border-bottom:1px solid var(--line,#dfe7e4);padding-bottom:12px;margin-bottom:15px}',
       '.sn-memo-heading h2{font-size:19px;margin:4px 0 5px}.sn-memo-heading p:not(.eyebrow){margin:0;color:var(--muted,#6b7774);font-size:12px;line-height:1.6}.sn-memo-mark{font-size:24px}',
       '.sn-memo-form label{display:block;margin-bottom:12px;font-size:12px;font-weight:750;color:#40514b}',
@@ -162,10 +199,11 @@
       '.sn-memo-item{border:1px solid #dfe7e4;background:#f8fbfa;border-radius:12px;padding:13px}.sn-memo-item-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:5px 12px}.sn-memo-item-head strong{font-size:14px;overflow-wrap:anywhere}.sn-memo-item-head span{font-size:11px;color:#66736e}',
       '.sn-memo-body{font-size:13px;line-height:1.65;white-space:pre-wrap;overflow-wrap:anywhere;margin:8px 0 10px;color:#263832}',
       '.sn-memo-item-actions{display:flex;justify-content:flex-end;gap:8px}.sn-memo-item-actions button{border:1px solid #cddad5;border-radius:8px;background:#fff;color:#155343;padding:6px 12px;font-weight:700;font-size:12px}.sn-memo-item-actions button.sn-memo-delete{color:#b42318}',
-      '.sn-memo-board [hidden]{display:none!important}',
+      '.sn-memo-dialog [hidden]{display:none!important}',
       '@media(max-width:560px){.sn-memo-board{padding:14px}.sn-memo-form-foot{display:block}.sn-memo-form-foot label{display:block;margin-bottom:12px}.sn-memo-form-buttons{justify-content:flex-end}.sn-memo-form-buttons button{font-size:13px;padding:10px 12px}}'
     ].join('\n');
     document.head.appendChild(style);
+
     form=document.getElementById('soilnoteMemoForm');
     list=document.getElementById('soilnoteMemoList');
     status=document.getElementById('soilnoteMemoStatus');
@@ -176,7 +214,15 @@
     cancelButton.addEventListener('click',resetEditor);
     list.addEventListener('click',onListClick);
     document.getElementById('soilnoteMemoRefresh').addEventListener('click',()=>syncNow(true));
+    document.getElementById('soilnoteMemoOpen').addEventListener('click',()=>{
+      refreshScope();
+      if(!dialog.open)dialog.showModal();
+      dialog.scrollTop=0;
+      syncNow(false);
+    });
+    document.getElementById('soilnoteMemoBack').addEventListener('click',()=>dialog.close());
   }
+
   function ensureClient(){
     if(client)return true;
     if(!/^https:\/\//.test(String(CONFIG.url||''))||!String(CONFIG.publishableKey||CONFIG.anonKey||'').trim())return false;
