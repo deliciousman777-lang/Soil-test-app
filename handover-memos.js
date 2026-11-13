@@ -13,6 +13,7 @@
   let syncing=false;
   let syncTimer=null;
   let editingId='';
+  let activeProjectId='';
   let section,form,list,status,saveButton,cancelButton;
 
   function readStore(){
@@ -29,7 +30,7 @@
     const value=String(localStorage.getItem(SHARE_KEY)||'').toUpperCase().replace(/[^0-9A-F]/g,'');
     return value.length===20?value:'';
   }
-  function scope(){return code()||'local';}
+  function scope(){return activeProjectId?'project:'+activeProjectId+':'+(code()||'local'):(code()||'local');}
   function bucket(){return store.buckets[currentScope]||(store.buckets[currentScope]={});}
   function uid(){return 'memo-'+Date.now()+'-'+Math.random().toString(16).slice(2);}
   function escapeHTML(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));}
@@ -46,15 +47,17 @@
     const next=scope();
     if(next===currentScope)return;
     // ローカル時に作ったメモは初回の共有接続で引き継ぐ。
-    if(next!=='local'&&!store.buckets[next]&&store.buckets.local){
-      store.buckets[next]=JSON.parse(JSON.stringify(store.buckets.local));
+    const localKey=activeProjectId?'project:'+activeProjectId+':local':'local';
+    if(code()&&!store.buckets[next]&&store.buckets[localKey]){
+      store.buckets[next]=JSON.parse(JSON.stringify(store.buckets[localKey]));
       persist();
     }
     currentScope=next;
     editingId='';
     if(form){form.reset();form.elements.author.value=localStorage.getItem(NAME_KEY)||'';cancelButton.hidden=true;saveButton.textContent='メモを保存';}
     renderList();
-    setStatus(next==='local'?'この端末に保存中。共有コードを設定すると他端末とも同期できます。':'共有メモの同期を確認中…');
+    setStatus(!code()?'この端末に保存中。共有コードを設定すると他端末とも同期できます。':'共有メモの同期を確認中…');
+    document.dispatchEvent(new CustomEvent('soilnote:memo-board-changed',{detail:{scope:currentScope,projectId:activeProjectId}}));
   }
   function renderList(){
     if(!list)return;
@@ -98,7 +101,7 @@
     resetEditor();
     renderList();
     document.dispatchEvent(new CustomEvent('soilnote:memo-saved',{detail:{id,scope:currentScope}}));
-    setStatus(currentScope==='local'?'端末に保存しました。':'端末に保存しました。クラウドへ同期中…','ok');
+    setStatus(!code()?'端末に保存しました。':'端末に保存しました。クラウドへ同期中…','ok');
     queueSync();
   }
   function onListClick(event){
@@ -131,11 +134,20 @@
   }
 
   function updateLauncherCount(){
-    const counter=document.getElementById('soilnoteMemoCount');
-    if(!counter)return;
-    const count=Object.values(bucket()).filter(x=>x&&!x.deletedAt&&x.body).length;
-    counter.textContent=count?count+'件':'';
-    counter.hidden=!count;
+    const countFor=key=>Object.values(store.buckets[key]||{}).filter(x=>x&&!x.deletedAt&&x.body).length;
+    const topCounter=document.getElementById('soilnoteMemoCount');
+    if(topCounter){
+      const count=countFor(code()||'local');
+      topCounter.textContent=count?count+'件':'';
+      topCounter.hidden=!count;
+    }
+    const projectCounter=document.getElementById('soilnoteProjectMemoCount');
+    const projectId=typeof state!=='undefined'?state.currentProjectId:null;
+    if(projectCounter&&projectId){
+      const count=countFor('project:'+projectId+':'+(code()||'local'));
+      projectCounter.textContent=count?count+'件':'';
+      projectCounter.hidden=!count;
+    }
   }
 
   function makeUI(){
@@ -147,6 +159,15 @@
     launcher.className='sn-memo-launcher';
     launcher.innerHTML='<button type="button" class="sn-memo-open" id="soilnoteMemoOpen" aria-haspopup="dialog"><span aria-hidden="true">📝</span><span>引き継ぎメモ</span><small id="soilnoteMemoCount" hidden></small><span class="sn-memo-chevron" aria-hidden="true">›</span></button>';
     host.insertBefore(launcher,host.firstChild);
+
+    const detailHost=document.getElementById('detailView');
+    if(detailHost&&!document.getElementById('soilnoteProjectMemoOpen')){
+      const projectLauncher=document.createElement('div');
+      projectLauncher.className='sn-memo-launcher sn-project-memo-launcher';
+      projectLauncher.innerHTML='<button type="button" class="sn-memo-open" id="soilnoteProjectMemoOpen" aria-haspopup="dialog"><span aria-hidden="true">📷</span><span>工事メモ・写真</span><small id="soilnoteProjectMemoCount" hidden></small><span class="sn-memo-chevron" aria-hidden="true">›</span></button>';
+      const anchor=detailHost.querySelector('.panel');
+      if(anchor)detailHost.insertBefore(projectLauncher,anchor);else detailHost.appendChild(projectLauncher);
+    }
 
     const dialog=document.createElement('dialog');
     dialog.id='soilnoteMemoBoard';
@@ -178,6 +199,7 @@
     style.id='soilnoteMemoStyles';
     style.textContent=[
       '.sn-memo-launcher{margin:0 0 16px}',
+      '.sn-project-memo-launcher{margin:8px 0 16px}',
       '.sn-memo-open{display:inline-flex;align-items:center;gap:8px;max-width:100%;padding:10px 14px;border:1px solid #cbdcd5;border-radius:11px;background:#fff;color:var(--accent-dark,#155343);font-weight:800;font-size:14px;box-shadow:0 2px 8px rgba(24,38,34,.04);cursor:pointer}',
       '.sn-memo-open:active{background:#eaf5ef}.sn-memo-open small{font-size:11px;color:#fff;background:var(--accent,#1e6f5c);border-radius:999px;padding:2px 7px}.sn-memo-chevron{font-size:21px;font-weight:400;line-height:1;color:#7c958b}',
       '.sn-memo-dialog{position:fixed;inset:0;margin:0;width:100%;max-width:none;height:100dvh;max-height:none;border:0;border-radius:0;overflow:auto;background:#f4f7f6;color:#17211f;padding:0;overscroll-behavior:contain}',
@@ -216,11 +238,29 @@
     cancelButton.addEventListener('click',resetEditor);
     list.addEventListener('click',onListClick);
     document.getElementById('soilnoteMemoRefresh').addEventListener('click',()=>syncNow(true));
-    document.getElementById('soilnoteMemoOpen').addEventListener('click',()=>{
+    function openBoard(projectId=''){
+      activeProjectId=String(projectId||'');
       refreshScope();
+      const project=activeProjectId&&typeof state!=='undefined'
+        ?state.data.projects.find(p=>String(p.id)===activeProjectId):null;
+      const name=String(project?.name||'');
+      const pageTitle=document.getElementById('soilnoteMemoPageTitle');
+      const heading=dialog.querySelector('.sn-memo-heading h2');
+      const description=dialog.querySelector('.sn-memo-heading p:not(.eyebrow)');
+      if(pageTitle)pageTitle.textContent=activeProjectId?'工事メモ・写真':'引き継ぎメモ';
+      if(heading)heading.textContent=activeProjectId?'工事メモ・写真':'引き継ぎ・連絡メモ';
+      if(description)description.textContent=activeProjectId
+        ?(name?name+'の資料写真や連絡事項を残せます。':'この工事の資料写真や連絡事項を残せます。')
+        :'試験の引き継ぎや注意事項、その他のメモを自由に残せます。';
       if(!dialog.open)dialog.showModal();
       dialog.scrollTop=0;
+      updateLauncherCount();
       syncNow(false);
+    }
+    document.getElementById('soilnoteMemoOpen').addEventListener('click',()=>openBoard());
+    document.getElementById('soilnoteProjectMemoOpen')?.addEventListener('click',()=>{
+      const p=typeof currentProject==='function'?currentProject():null;
+      if(p)openBoard(p.id);
     });
     document.getElementById('soilnoteMemoBack').addEventListener('click',()=>dialog.close());
   }
@@ -235,14 +275,15 @@
     }catch(e){console.error('[SoilNote Memo] client',e);return false;}
   }
   function queueSync(){
-    if(currentScope==='local')return;
+    if(!code())return;
     clearTimeout(syncTimer);
     syncTimer=setTimeout(()=>syncNow(false),450);
   }
   async function syncNow(manual){
     refreshScope();
     const active=currentScope;
-    if(active==='local'){
+    const projectId=activeProjectId;
+    if(!code()){
       if(manual)setStatus('現在は端末保存です。「データ共有」で共有コードを設定すると同期できます。');
       return;
     }
@@ -254,9 +295,11 @@
     syncing=true;
     if(manual)setStatus('共有メモを同期中…');
     try{
-      const result=await client.rpc('soilnote_memo_list',{p_code:active});
+      const result=await (projectId
+        ?client.rpc('soilnote_memo_project_list',{p_code:code(),p_project_id:projectId})
+        :client.rpc('soilnote_memo_list',{p_code:code()}));
       if(result.error)throw result.error;
-      if(scope()!==active)return;
+      if(scope()!==active||currentScope!==active)return;
       const remote=new Map((result.data||[]).map(x=>[String(x.memo_id),x]));
       const local=bucket();
       let changed=false;
@@ -271,13 +314,16 @@
       }
       if(changed){persist();renderList();}
       for(const note of Object.values(local)){
-        if(scope()!==active)return;
+        if(scope()!==active||currentScope!==active)return;
         const r=remote.get(String(note.id));
         if(r&&(new Date(r.updated_at).getTime()||0)>=(new Date(note.updatedAt).getTime()||0))continue;
-        const params={p_code:active,p_memo_id:note.id,p_updated_at:note.updatedAt};
+        const params={p_code:code(),p_memo_id:note.id,p_updated_at:note.updatedAt};
         const res=note.deletedAt
           ?await client.rpc('soilnote_memo_delete',params)
-          :await client.rpc('soilnote_memo_upsert',{...params,p_title:note.title||'',p_body:note.body||'',p_author:note.author||''});
+          :await client.rpc(projectId?'soilnote_memo_project_upsert':'soilnote_memo_upsert',{
+            ...params,...(projectId?{p_project_id:projectId}:{}),
+            p_title:note.title||'',p_body:note.body||'',p_author:note.author||''
+          });
         if(res.error)throw res.error;
       }
       setStatus('共有メモ同期済み（端末にも保存）','ok');
@@ -290,6 +336,7 @@
   function boot(){
     makeUI();
     if(!form)return;
+    window.SoilNoteMemoBoard={scope:()=>currentScope||scope(),projectId:()=>activeProjectId};
     refreshScope();
     setInterval(()=>{
       refreshScope();
