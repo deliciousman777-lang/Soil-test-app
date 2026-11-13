@@ -14,12 +14,15 @@
   let cloudBusy=false,renderScheduled=false;
   let lastScope='';
   const urlCache=new Map();
+  const renderedGallery=new WeakMap();
+  const pendingByScope=new Map();
 
   function code(){
     const v=String(localStorage.getItem(CODE_KEY)||'').toUpperCase().replace(/[^0-9A-F]/g,'');
     return v.length===20?v:'';
   }
-  function scope(){return code()||'local';}
+  function scope(){return window.SoilNoteMemoBoard?.scope()||code()||'local';}
+  function cloudScope(value=scope()){const key=code();return Boolean(key&&(value===key||value.endsWith(':'+key)));}
   function esc(x){return String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));}
   function uid(){return crypto.randomUUID();}
   function hint(message,error=false){
@@ -163,7 +166,7 @@
       const box=card.querySelector('.sn-photo-gallery');
       if(!box)return;
       const photos=combined(memoId);
-      box.innerHTML=photos.map(p=>{
+      const markup=photos.map(p=>{
         const id=p.id||'', localId=p.localId||'';
         const label=p.synced?'写真':'写真（端末保存・同期待ち）';
         return '<div class="sn-photo-tile"><button type="button" class="sn-photo-view" data-photo-view="'+esc(id)+'" data-photo-local="'+esc(localId)+'" aria-label="写真を拡大">'+
@@ -171,6 +174,11 @@
           '<button type="button" class="sn-photo-remove" data-photo-remove="'+esc(id)+'" data-photo-local="'+esc(localId)+'" aria-label="写真を削除">×</button>'+
           (p.synced?'':'<small>端末保存</small>')+'</div>';
       }).join('');
+      // 同期のたびに画像DOMを作り直すと、写真が一瞬消えたり点滅してしまう。
+      if(renderedGallery.get(box)!==markup){
+        box.innerHTML=markup;
+        renderedGallery.set(box,markup);
+      }
       const counter=card.querySelector('.sn-photo-count');
       if(counter)counter.textContent=photos.length?photos.length+'/'+MAX_PHOTOS+'枚':'';
     });
@@ -237,7 +245,7 @@
     await refreshLocal();
     if(saved!==files.length)hint('一部の写真を端末に保存できませんでした。容量を確認してください。',true);
     else hint('写真を端末に保存しました。共有中は自動同期します。');
-    if(memoScope!=='local')document.getElementById('soilnoteMemoRefresh')?.click();
+    if(cloudScope(memoScope))document.getElementById('soilnoteMemoRefresh')?.click();
   }
   function makePickers(parent,memoId){
     const wrap=document.createElement('div');
@@ -288,13 +296,18 @@
   async function syncPhotos(allowUpload){
     if(cloudBusy||!code()||!navigator.onLine)return;
     cloudBusy=true;
+    const active=scope();
     try{
       const allDeletes=await getAll('deletions');
-      for(const d of allDeletes.filter(x=>x.scope===scope()))await postDeletion(d);
+      for(const d of allDeletes.filter(x=>x.scope===active)){
+        if(scope()!==active)return;
+        await postDeletion(d);
+      }
       if(allowUpload){
         const all=await getAll('photos');
-        const fresh=all.filter(x=>x.scope===scope()&&!x.remoteId);
+        const fresh=all.filter(x=>x.scope===active&&!x.remoteId);
         for(const p of fresh){
+          if(scope()!==active)return;
           // A memo's database row must be synced before its files can be linked.
           const data=new FormData();
           data.set('action','upload');data.set('code',code());data.set('memo_id',p.memoId);
@@ -307,7 +320,16 @@
         }
       }
       const result=await api('list',{});
-      remotePhotos=result.photos||[];
+      if(scope()!==active)return;
+      const previous=new Map(remotePhotos.map(p=>[p.id,p]));
+      const now=Date.now();
+      remotePhotos=(result.photos||[]).map(p=>{
+        const old=previous.get(p.id);
+        // 署名付き画像URLは1時間有効。45分は既存URLを使い画像再読込を防ぐ。
+        return old?.url&&old._urlFetchedAt&&now-old._urlFetchedAt<45*60*1000
+          ?{...p,url:old.url,_urlFetchedAt:old._urlFetchedAt}
+          :{...p,_urlFetchedAt:now};
+      });
       await refreshLocal();
     }catch(e){
       console.warn('[SoilNote photo sync]',e);
@@ -316,9 +338,11 @@
   }
   async function migrateLocal(){
     const current=scope();
-    if(current==='local')return;
+    if(!cloudScope(current))return;
+    const projectId=window.SoilNoteMemoBoard?.projectId()||'';
+    const localKey=projectId?'project:'+projectId+':local':'local';
     const all=await getAll('photos');
-    const local=all.filter(x=>x.scope==='local');
+    const local=all.filter(x=>x.scope===localKey);
     if(!local.length)return;
     const targets=all.filter(x=>x.scope===current);
     for(const p of local){
@@ -330,15 +354,15 @@
   async function onDeleteMemo(memoId,atScope){
     const all=await getAll('photos');
     for(const p of all.filter(x=>x.scope===atScope&&x.memoId===memoId))await del('photos',p.localId);
-    if(atScope!=='local'){
+    if(cloudScope(atScope)){
       await put('deletions',{key:atScope+':memo:'+memoId,scope:atScope,kind:'memo',memoId});
     }
     await refreshLocal();
-    if(atScope!=='local')syncPhotos(false);
+    if(cloudScope(atScope))syncPhotos(false);
   }
   async function removePhoto(id,localId){
     if(!window.confirm('この写真を削除しますか？'))return;
-    if(id&&scope()!=='local'){
+    if(id&&cloudScope()){
       await put('deletions',{key:scope()+':photo:'+id,scope:scope(),kind:'photo',photoId:id});
     }
     if(localId)await del('photos',localId);
@@ -436,26 +460,33 @@
     observer.observe(list,{childList:true});
     installCards();
 
-    document.getElementById('soilnoteMemoOpen')?.addEventListener('click',async()=>{
-      if(scope()!==lastScope){
-        lastScope=scope();
-        await migrateLocal();
+    async function onBoardChange(){
+      const next=scope();
+      if(next!==lastScope){
+        pendingByScope.set(lastScope,pending);
+        pending=pendingByScope.get(next)||[];
+        lastScope=next;
+        renderPending();
       }
+      await migrateLocal();
       await refreshLocal();
-      syncPhotos(false);
-    });
+      if(code())syncPhotos(false);
+    }
+    document.addEventListener('soilnote:memo-board-changed',()=>onBoardChange().catch(console.error));
+    document.getElementById('soilnoteMemoOpen')?.addEventListener('click',()=>onBoardChange().catch(console.error));
+    document.getElementById('soilnoteProjectMemoOpen')?.addEventListener('click',()=>onBoardChange().catch(console.error));
     document.getElementById('soilnoteMemoRefresh')?.addEventListener('click',()=>syncPhotos(false));
     window.addEventListener('online',()=>syncPhotos(true));
     window.addEventListener('focus',()=>{
-      if(scope()!==lastScope){lastScope=scope();migrateLocal().catch(console.error);}
-      syncPhotos(false);
+      if(scope()!==lastScope)onBoardChange().catch(console.error);
+      else syncPhotos(false);
     });
     window.addEventListener('storage',e=>{
-      if(e.key===CODE_KEY){lastScope=scope();migrateLocal().then(()=>syncPhotos(true)).catch(console.error);}
+      if(e.key===CODE_KEY)onBoardChange().catch(console.error);
     });
     setInterval(()=>{
-      if(scope()!==lastScope){lastScope=scope();migrateLocal().catch(console.error);}
-      if(document.visibilityState==='visible'&&code())syncPhotos(false);
+      if(scope()!==lastScope)onBoardChange().catch(console.error);
+      else if(document.visibilityState==='visible'&&code())syncPhotos(false);
     },30000);
     if(code())setTimeout(()=>syncPhotos(false),1800);
   }
