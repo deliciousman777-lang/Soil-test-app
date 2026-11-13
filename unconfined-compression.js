@@ -109,8 +109,8 @@
     const sample=form()?.elements.sample.value||'';
     root.innerHTML=levelValues.map(v=>{
       const key=levelKey(v),cached=levelCache.get(key),saved=latestUnconfined(sample,v);
-      const filled=hasLevelData(cached)||Boolean(saved);
-      return `<button type="button" data-level-key="${esc(key)}" class="unconfined-level-tab ${activeLevel===key?'active':''}">${esc(Number(v).toLocaleString('ja-JP'))} ${filled?'✓':''}</button>`;
+      const status=saved?'✓':(hasLevelData(cached)?'入力中':'');
+      return `<button type="button" data-level-key="${esc(key)}" class="unconfined-level-tab ${activeLevel===key?'active':''}">${esc(Number(v).toLocaleString('ja-JP'))} ${status}</button>`;
     }).join('');
   }
   function switchLevel(value,saveCurrent=true){
