@@ -183,18 +183,27 @@
     const c=canvas(i);if(!c)return;const ctx=c.getContext('2d');ctx.clearRect(0,0,c.width,c.height);ctx.lineWidth=2;ctx.lineCap='round';ctx.lineJoin='round';
     (sketchState[i-1]||[]).forEach(stroke=>{if(!stroke.length)return;ctx.beginPath();stroke.forEach((p,j)=>{const x=p.x*c.width,y=p.y*c.height;j?ctx.lineTo(x,y):ctx.moveTo(x,y);});ctx.stroke();});
   }
+  // 指での通常スワイプを優先。描画ボタンを押したときだけ指で描く。
+  // マウス・ペンによる描画は切り替えなしで利用できる。
+  function setSketchMode(i,enabled){
+    const c=canvas(i);if(!c)return;
+    c.dataset.drawMode=enabled?'on':'off';
+    c.style.touchAction=enabled?'none':'pan-y';
+    const b=document.querySelector('[data-toggle-sketch="'+i+'"]');
+    if(b){b.textContent=enabled?'描画終了':'指で描く';b.setAttribute('aria-pressed',String(enabled));}
+  }
   function attachCanvas(i){
     const c=canvas(i);if(!c||c.dataset.ready)return;c.dataset.ready='1';let active=null;
     const point=e=>{const r=c.getBoundingClientRect();return{x:Math.max(0,Math.min(1,(e.clientX-r.left)/r.width)),y:Math.max(0,Math.min(1,(e.clientY-r.top)/r.height))};};
-    c.addEventListener('pointerdown',e=>{e.preventDefault();c.setPointerCapture(e.pointerId);active=[point(e)];sketchState[i-1].push(active);redraw(i);});
+    c.addEventListener('pointerdown',e=>{if(e.pointerType==='touch'&&c.dataset.drawMode!=='on')return;e.preventDefault();c.setPointerCapture(e.pointerId);active=[point(e)];sketchState[i-1].push(active);redraw(i);});
     c.addEventListener('pointermove',e=>{if(!active)return;e.preventDefault();active.push(point(e));redraw(i);});
-    const end=()=>{active=null;};c.addEventListener('pointerup',end);c.addEventListener('pointercancel',end);
+    const end=()=>{active=null;};c.addEventListener('pointerup',end);c.addEventListener('pointercancel',end);setSketchMode(i,false);
   }
   function clearSketch(i){sketchState[i-1]=[];redraw(i);}
 
   function specimenCard(i){return `<section class="unconfined-specimen"><div class="specimen-head"><strong>供試体 ${i}</strong><span>最大値 qu</span></div>
     <div class="unconfined-main-grid"><label>供試体状態<input name="state${i}" autocomplete="off" placeholder="例：良好"></label><label>質量 (g)<input name="mass${i}" inputmode="decimal"></label><label>直径 D (cm)<input name="diameter${i}" inputmode="decimal"></label><label>高さ L (cm)<input name="height${i}" inputmode="decimal"></label><label>最大値 (kN/m²)<input name="maxStrength${i}" inputmode="decimal"></label><label>記事<input name="note${i}" autocomplete="off"></label></div>
-    <div class="unconfined-lower"><div><div class="unconfined-sketch-head"><strong>破壊スケッチ</strong><button type="button" class="ghost" data-clear-sketch="${i}">クリア</button></div><canvas id="unconfinedSketch${i}" width="150" height="210" aria-label="供試体${i}の破壊スケッチ"></canvas></div>
+    <div class="unconfined-lower"><div><div class="unconfined-sketch-head"><strong>破壊スケッチ</strong><button type="button" class="ghost" data-toggle-sketch="${i}" aria-pressed="false">指で描く</button><button type="button" class="ghost" data-clear-sketch="${i}">クリア</button></div><canvas id="unconfinedSketch${i}" width="150" height="210" aria-label="供試体${i}の破壊スケッチ"></canvas></div>
     <div class="unconfined-moisture"><strong>含水比</strong><label>容器No.<input name="containerNo${i}" autocomplete="off"></label><label>ma 容器＋湿潤土 (g)<input name="ma${i}" inputmode="decimal"></label><label>mb 容器＋乾燥土 (g)<input name="mb${i}" inputmode="decimal"></label><label>mc 容器 (g)<input name="mc${i}" inputmode="decimal"></label><div class="unconfined-w"><span>w</span><strong id="unconfinedW${i}">—</strong></div></div></div></section>`;}
 
   function inject(){
@@ -207,7 +216,8 @@
       <div class="unconfined-specimens">${specimenCard(1)}${specimenCard(2)}${specimenCard(3)}</div>
       <div id="unconfinedCheck" class="mass-check">3本の質量・直径・高さ・最大値を入力してください。含水比と破壊スケッチは任意です。</div><div class="dialog-actions"><button type="button" class="ghost" id="unconfinedCancel">キャンセル</button><button class="primary" id="unconfinedSubmit">保存</button></div></form>`;document.body.appendChild(d);
     const style=document.createElement('style');style.id='unconfinedStyles';style.textContent=`
-      .unconfined-top{display:grid;grid-template-columns:1.3fr 1fr 1fr 1fr 1fr;gap:8px}.unconfined-specimens{display:grid;gap:12px;margin-top:12px}.unconfined-specimen{padding:13px;border:1px solid var(--line,#dfe7e3);border-radius:15px;background:#fff}.unconfined-main-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:7px}.unconfined-lower{display:grid;grid-template-columns:180px 1fr;gap:12px;margin-top:10px}.unconfined-sketch-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px}.unconfined-sketch-head button{padding:5px 8px;font-size:11px}.unconfined-specimen canvas{display:block;width:150px;height:210px;border:1px dashed #7d8783;background:#fff;touch-action:none}.unconfined-moisture{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;align-content:start}.unconfined-moisture>strong{grid-column:1/-1}.unconfined-w{display:flex;align-items:center;justify-content:space-between;border:1px solid var(--line,#dfe7e3);border-radius:11px;padding:8px 10px;background:#f8fbfa}.unconfined-w strong{color:var(--accent-dark,#0b5136)}@media(max-width:900px){.unconfined-top{grid-template-columns:1fr 1fr}.unconfined-main-grid{grid-template-columns:repeat(3,1fr)}}@media(max-width:560px){.unconfined-top,.unconfined-main-grid,.unconfined-lower{grid-template-columns:1fr}.unconfined-moisture{grid-template-columns:1fr 1fr}.unconfined-specimen canvas{width:100%;max-width:220px;height:250px}}
+      .unconfined-dialog{max-height:calc(100dvh - 24px);overflow-y:auto;overscroll-behavior-y:contain;-webkit-overflow-scrolling:touch}
+      .unconfined-top{display:grid;grid-template-columns:1.3fr 1fr 1fr 1fr 1fr;gap:8px}.unconfined-specimens{display:grid;gap:12px;margin-top:12px}.unconfined-specimen{padding:13px;border:1px solid var(--line,#dfe7e3);border-radius:15px;background:#fff}.unconfined-main-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:7px}.unconfined-lower{display:grid;grid-template-columns:180px 1fr;gap:12px;margin-top:10px}.unconfined-sketch-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:5px}.unconfined-sketch-head button{padding:5px 8px;font-size:11px}.unconfined-specimen canvas{display:block;width:150px;height:210px;border:1px dashed #7d8783;background:#fff;touch-action:pan-y}.unconfined-moisture{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;align-content:start}.unconfined-moisture>strong{grid-column:1/-1}.unconfined-w{display:flex;align-items:center;justify-content:space-between;border:1px solid var(--line,#dfe7e3);border-radius:11px;padding:8px 10px;background:#f8fbfa}.unconfined-w strong{color:var(--accent-dark,#0b5136)}@media(max-width:900px){.unconfined-top{grid-template-columns:1fr 1fr}.unconfined-main-grid{grid-template-columns:repeat(3,1fr)}}@media(max-width:560px){.unconfined-top,.unconfined-main-grid,.unconfined-lower{grid-template-columns:1fr}.unconfined-moisture{grid-template-columns:1fr 1fr}.unconfined-specimen canvas{width:100%;max-width:220px;height:250px}}
 
       .unconfined-level-switch{margin:12px 0;padding:12px;border:1px solid #d9e6df;border-radius:14px;background:#f7faf8}.unconfined-level-head{display:flex;justify-content:space-between;align-items:center;gap:10px}.unconfined-level-head strong{font-size:14px}.unconfined-level-head button{font-size:12px;padding:6px 10px}.unconfined-level-buttons{display:flex;gap:8px;overflow-x:auto;padding:12px 0 7px}.unconfined-level-tab{min-width:85px;padding:10px 16px;white-space:nowrap;border:1px solid #c9d8d0;border-radius:11px;background:#fff;font-weight:800;color:#51615a}.unconfined-level-tab.active{background:#16745c;color:#fff;border-color:#16745c}.unconfined-level-switch small{display:block;color:#68756e;font-size:11px;line-height:1.5}.unconfined-level-switch #unconfinedLevelNote{font-weight:700;color:#24644e;margin-bottom:3px}.unconfined-card-levels{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:10px}.unconfined-card-levels button{padding:7px 11px;border:1px solid #a9caba;border-radius:9px;color:#2a5c49;background:#f4faf7;font-weight:800;font-size:12px}.unconfined-card-levels button.active{background:#176c55;color:#fff}
     `;document.head.appendChild(style);
@@ -231,14 +241,14 @@
       if(value===null||value<0){alert('0以上の数値を入力してください。');return;}
       switchLevel(value);
     });
-    d.querySelector('#unconfinedClose').addEventListener('click',()=>d.close());d.querySelector('#unconfinedCancel').addEventListener('click',()=>d.close());d.addEventListener('click',e=>{const b=e.target.closest('[data-clear-sketch]');if(b)clearSketch(Number(b.dataset.clearSketch));});
+    d.querySelector('#unconfinedClose').addEventListener('click',()=>d.close());d.querySelector('#unconfinedCancel').addEventListener('click',()=>d.close());d.addEventListener('click',e=>{const b=e.target.closest('[data-clear-sketch]');if(b)clearSketch(Number(b.dataset.clearSketch));const toggle=e.target.closest('[data-toggle-sketch]');if(toggle){const i=Number(toggle.dataset.toggleSketch);setSketchMode(i,canvas(i)?.dataset.drawMode!=='on');}});
     [1,2,3].forEach(attachCanvas);
   }
 
 
   function reset(){
     state.editingTestId=null;draftOriginId=null;levelCache.clear();activeLevel=null;
-    const f=form();f.reset();sketchState.splice(0,3,[],[],[]);syncSample();
+    const f=form();f.reset();sketchState.splice(0,3,[],[],[]);[1,2,3].forEach(i=>setSketchMode(i,false));syncSample();
     document.getElementById('unconfinedTitle').textContent='一軸圧縮試験';
     document.getElementById('unconfinedSubmit').textContent='入力済み水準をまとめて保存';
     switchLevel(levelValues[0],false);
