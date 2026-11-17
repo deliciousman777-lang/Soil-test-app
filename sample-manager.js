@@ -1,7 +1,7 @@
 // SoilNote 試料管理：工事件名 → 試料 → 各試験
 (function(){
-  const MANAGED_FORMS=['moistureForm','grainForm','particleDensityForm','atterbergForm','coneIndexForm'];
-  const ADD_BUTTONS=['addMoistureBtn','addGrainBtn','addParticleDensityBtn','addAtterbergBtn','addConeIndexBtn'];
+  const MANAGED_FORMS=['moistureForm','grainForm','particleDensityForm','atterbergForm','coneIndexForm','compactionForm'];
+  const ADD_BUTTONS=['addMoistureBtn','addGrainBtn','addParticleDensityBtn','addAtterbergBtn','addConeIndexBtn','addCompactionBtn'];
   let pendingTestButtonId=null;
   let editingSampleId=null;
 
