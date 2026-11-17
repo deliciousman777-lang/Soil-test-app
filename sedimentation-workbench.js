@@ -658,10 +658,21 @@
 
     const now=new Date().toISOString();
     target.draftFields=merged;target.draft=true;target.updatedAt=now;target.draftSavedAt=now;
-    target.sedimentationInputFields={...(source.sedimentationInputFields||fresh)};
+    target.sedimentationInputFields={...merged};
     target.sedimentationAutoSavedAt=source.sedimentationAutoSavedAt;
-    if(source.sedimentation?.valid)target.sedimentation=source.sedimentation;
-    if(source.sedimentationPendingFields)target.sedimentationPendingFields=source.sedimentationPendingFields;
+    target.draftFieldLabels={...(source.draftFieldLabels||{}),...(target.draftFieldLabels||{})};
+    TIMES.forEach((time,i)=>{
+      const key=`sed_r_${i}`;
+      if(!target.draftFieldLabels[key])target.draftFieldLabels[key]=`${time}分 / 浮ひょうの読み`;
+    });
+    const recalculated=sedimentationFromSnapshot(merged);
+    if(recalculated?.valid){
+      recalculated.settings.sampleContainerNo=String(merged[SAMPLE_CONTAINER]||'');
+      target.sedimentation=recalculated;
+      delete target.sedimentationPendingFields;
+    }else{
+      target.sedimentationPendingFields=merged;
+    }
     target.grainMassBackup={...(source.grainMassBackup||{}),...(target.grainMassBackup||{})};
     // A tombstone prevents Supabase synchronization from restoring the
     // removed duplicate test ID.
