@@ -325,7 +325,22 @@
       return v!==null&&v!==undefined&&String(v).trim()!=='';
     });
     const rows=entries.map(([k,v])=>`<tr><th style="text-align:left">${esc(test.draftFieldLabels?.[k]||k)}</th><td style="text-align:left">${typeof v==='boolean'?(v?'ON':'OFF'):esc(v)}</td></tr>`).join('');
-    body.innerHTML=`<p class="review-meta">試料：${esc(test.sample||'未入力')} ｜ 状態：途中保存 ｜ 保存日時：${esc(new Date(test.draftSavedAt||test.updatedAt||test.createdAt).toLocaleString('ja-JP'))}</p><div class="review-summary"><div><span>状態</span><strong style="color:#9a6700">途中保存</strong></div><div><span>入力済み</span><strong>${meaningfulCount(test.draftFields)}</strong><small>項目</small></div><div><span>操作</span><strong>続き</strong><small>から再開可能</small></div></div><section class="review-section"><h3>現在の入力値</h3><div class="table-wrap"><table class="review-table"><tbody>${rows||'<tr><td>まだ入力値がありません</td></tr>'}</tbody></table></div></section><div class="review-note">途中保存データです。「続き」から入力を再開し、必要な項目がそろったら通常の「保存」で完成データにします。</div>`;
+    // 一軸は水準切替中の値が draftExtra.cache に保存されるため、確認画面にも表示する。
+    const levelCache=test.type==='unconfined-compression'?test.draftExtra?.cache||{}:{};
+    const levelRows=Object.entries(levelCache).sort((a,b)=>Number(a[0])-Number(b[0])).map(([level,snapshot])=>{
+      const fields=Object.entries(snapshot?.fields||{}).filter(([name,value])=>{
+        if(['sample','dosage','dosageManual'].includes(name))return false;
+        return value!==null&&value!==undefined&&String(value).trim()!=='';
+      });
+      const labels=name=>{
+        const m=/^(containerNo|ma|mb|mc)([123])$/.exec(name);
+        return m?({containerNo:'容器No.',ma:'容器＋湿潤土 ma',mb:'容器＋乾燥土 mb',mc:'容器 mc'}[m[1]]+'（供試体'+m[2]+'）'):name;
+      };
+      const tr=fields.map(([name,value])=>`<tr><th style="text-align:left">${esc(labels(name))}</th><td style="text-align:left">${esc(value)}</td></tr>`).join('');
+      return `<details style="margin:10px 0"><summary style="cursor:pointer;font-weight:700">${esc(level)} kg/m³（${fields.length}項目）</summary><div class="table-wrap"><table class="review-table"><tbody>${tr||'<tr><td>入力値なし</td></tr>'}</tbody></table></div></details>`;
+    }).join('');
+    const levelReview=levelRows?`<section class="review-section"><h3>水準別に残っている入力値（復旧確認用）</h3>${levelRows}</section>`:'';
+    body.innerHTML=`<p class="review-meta">試料：${esc(test.sample||'未入力')} ｜ 状態：途中保存 ｜ 保存日時：${esc(new Date(test.draftSavedAt||test.updatedAt||test.createdAt).toLocaleString('ja-JP'))}</p><div class="review-summary"><div><span>状態</span><strong style="color:#9a6700">途中保存</strong></div><div><span>入力済み</span><strong>${meaningfulCount(test.draftFields)}</strong><small>項目</small></div><div><span>操作</span><strong>続き</strong><small>から再開可能</small></div></div><section class="review-section"><h3>現在の入力値</h3><div class="table-wrap"><table class="review-table"><tbody>${rows||'<tr><td>まだ入力値がありません</td></tr>'}</tbody></table></div></section>${levelReview}<div class="review-note">途中保存データです。「続き」から入力を再開し、必要な項目がそろったら通常の「保存」で完成データにします。</div>`;
     dialog.showModal();
   }
 
