@@ -635,14 +635,14 @@
       &&String(original[key]??'').trim()!==''&&String(fresh[key]??'').trim()!==''
       &&String(original[key])!==String(fresh[key]));
     const explanation=conflicts.length
-      ?`共通項目の異なる値が${conflicts.length}件あります。ふるい等は古い入力値、沈降の読みは24時間自動保存側を優先します。\\n`
+      ?`共通項目の異なる値が${conflicts.length}件あります。ふるい等は古い入力値、沈降の読みは24時間自動保存側を優先します。\n`
       :'';
-    if(!confirm(`同じ試料「${source.sample}」の途中保存2件を1件に統合しますか？\\n${explanation}両方の元データを端末にバックアップしてから統合します。`))return;
+    if(!confirm(`同じ試料「${source.sample}」の途中保存2件を1件に統合しますか？\n${explanation}両方の元データを端末にバックアップしてから統合します。`))return;
 
     const merged={...fresh};
     Object.entries(original).forEach(([key,value])=>{
       if(String(value??'').trim()===''&&typeof value!=='boolean')return;
-      if(/^sed_r_\\d+$/.test(key)&&String(merged[key]??'').trim()!=='')return;
+      if(/^sed_r_\d+$/.test(key)&&String(merged[key]??'').trim()!=='')return;
       merged[key]=value;
     });
     merged.useSedimentation=true;
