@@ -604,6 +604,77 @@
     },true);
   }
 
+
+  // Do not silently delete same-name tests. Offer a repair only when one
+  // recent draft came from the 24-hour autosaver and a single older draft
+  // looks like its unfinished counterpart.
+  function mergeCandidate(autosaved,project){
+    if(!autosaved?.draft||!autosaved.sedimentationAutoSavedAt||!project)return null;
+    const container=test=>String(test.draftFields?.[SAMPLE_CONTAINER]
+      ||test.sedimentationInputFields?.[SAMPLE_CONTAINER]
+      ||test.sedimentation?.settings?.sampleContainerNo||'').trim();
+    const c=container(autosaved);
+    const created=new Date(autosaved.createdAt||autosaved.sedimentationAutoSavedAt).getTime();
+    const candidates=(project.tests||[]).filter(t=>
+      t.type==='grain'&&t.id!==autosaved.id&&t.draft&&!t.sedimentationAutoSavedAt
+      &&String(t.sample||'').trim()===String(autosaved.sample||'').trim()
+      &&(!c||!container(t)||c===container(t))
+      &&new Date(t.createdAt||0).getTime()<=created);
+    return candidates.length===1?candidates[0]:null;
+  }
+
+  function mergeDuplicateDraft(autosavedId){
+    const project=current();if(!project)return;
+    const source=(project.tests||[]).find(t=>t.id===autosavedId);
+    const target=mergeCandidate(source,project);
+    if(!target){alert('統合対象が見つかりません。試料名と容器No.を確認してください。');return;}
+    const fresh={...(source.sedimentationInputFields||{}),...(source.draftFields||{})};
+    const original=target.draftFields||{};
+    const oldKeys=Object.keys(original);
+    const conflicts=oldKeys.filter(key=>key!=='sample'
+      &&String(original[key]??'').trim()!==''&&String(fresh[key]??'').trim()!==''
+      &&String(original[key])!==String(fresh[key]));
+    const explanation=conflicts.length
+      ?`共通項目の異なる値が${conflicts.length}件あります。ふるい等は古い入力値、沈降の読みは24時間自動保存側を優先します。\\n`
+      :'';
+    if(!confirm(`同じ試料「${source.sample}」の途中保存2件を1件に統合しますか？\\n${explanation}両方の元データを端末にバックアップしてから統合します。`))return;
+
+    const merged={...fresh};
+    Object.entries(original).forEach(([key,value])=>{
+      if(String(value??'').trim()===''&&typeof value!=='boolean')return;
+      if(/^sed_r_\\d+$/.test(key)&&String(merged[key]??'').trim()!=='')return;
+      merged[key]=value;
+    });
+    merged.useSedimentation=true;
+    const backupKey='soilnote-grain-duplicate-backups-v1';
+    try{
+      const previous=JSON.parse(localStorage.getItem(backupKey)||'[]');
+      const snapshots=Array.isArray(previous)?previous:[];
+      snapshots.push({at:new Date().toISOString(),projectId:project.id,
+        originalTest:JSON.parse(JSON.stringify(target)),autosavedTest:JSON.parse(JSON.stringify(source))});
+      localStorage.setItem(backupKey,JSON.stringify(snapshots.slice(-20)));
+    }catch(error){console.error('重複統合前のバックアップに失敗しました',error);
+      alert('元データのバックアップに失敗したため、統合は中止しました。');return;}
+
+    const now=new Date().toISOString();
+    target.draftFields=merged;target.draft=true;target.updatedAt=now;target.draftSavedAt=now;
+    target.sedimentationInputFields={...(source.sedimentationInputFields||fresh)};
+    target.sedimentationAutoSavedAt=source.sedimentationAutoSavedAt;
+    if(source.sedimentation?.valid)target.sedimentation=source.sedimentation;
+    if(source.sedimentationPendingFields)target.sedimentationPendingFields=source.sedimentationPendingFields;
+    target.grainMassBackup={...(source.grainMassBackup||{}),...(target.grainMassBackup||{})};
+    // A tombstone prevents Supabase synchronization from restoring the
+    // removed duplicate test ID.
+    project.deletedTestIds={...(project.deletedTestIds||{}),[String(source.id)]:now};
+    project.tests=project.tests.filter(t=>t.id!==source.id);
+    project.updatedAt=now;
+    try{saveData();renderTests();renderProjects();}catch(error){
+      console.error('重複統合の保存に失敗しました',error);
+      alert('統合の保存に失敗しました。確認してください。');return;
+    }
+    showAutoSaveNotice('✓ 粒度試験の途中保存2件を1件に統合しました');
+  }
+
   function patchEditAndCards(){
     if(typeof resetGrainDialog==='function'&&!resetGrainDialog.__sedWorkbenchPatched){
       const base=resetGrainDialog;
@@ -651,7 +722,12 @@
     if(typeof renderGrainCard==='function'&&!renderGrainCard.__sedWorkbenchPatched){
       const base=renderGrainCard;
       const wrapped=function(test){
-        let html=base(test);if(test?.draft)return html;
+        let html=base(test);
+        if(test?.draft){
+          const duplicate=mergeCandidate(test,current());
+          if(duplicate)html+=`<div class="sed-run-actions"><button type="button" class="ghost" data-sed-merge="${esc(test.id)}">重複候補を確認・統合</button></div>`;
+          return html;
+        }
         const no=test?.sedimentation?.settings?.sampleContainerNo
           ||test?.sedimentationInputFields?.[SAMPLE_CONTAINER];
         if(no&&(test?.sedimentation?.enabled||test?.sedimentationInputFields)){
@@ -672,6 +748,7 @@
     const start=e.target.closest?.('[data-sed-start]');if(start){startExisting(start.dataset.sedStart);return;}
     const open=e.target.closest?.('[data-sed-open]');if(open){openRun(open.dataset.sedOpen);return;}
     const remove=e.target.closest?.('[data-sed-remove]');if(remove){removeRun(remove.dataset.sedRemove);return;}
+    const merge=e.target.closest?.('[data-sed-merge]');if(merge){mergeDuplicateDraft(merge.dataset.sedMerge);return;}
   });
 
   document.addEventListener('keydown',e=>{
