@@ -232,7 +232,15 @@
     document.getElementById('compactionTitle').textContent='突固めによる土の締固め試験';document.getElementById('compactionSubmit').textContent='保存';updatePreview();
   }
 
-  function openNew(){resetForm();dialogEl().showModal();}
+  function openNew(){
+    resetForm();
+    // 新規締固め試験は工事件名で選択中の試料を初期表示する。
+    const manager=window.SoilNoteSamples;
+    manager?.syncSampleControls?.();
+    const sample=manager?.activeSample?.(currentProject());
+    if(sample)formEl().elements.sample.value=sample.name;
+    dialogEl().showModal();
+  }
 
   function openEdit(id){
     const p=currentProject();const t=p?.tests.find(x=>x.id===id&&x.type===TYPE);if(!t)return;resetForm();state.editingTestId=id;const f=formEl();
