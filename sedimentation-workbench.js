@@ -157,7 +157,7 @@
     return d.toISOString();
   }
 
-  function autosaveCurrent(){
+  function autosaveCurrent(event){
     const form=document.getElementById('grainForm');
     if(!form?.elements?.useSedimentation?.checked)return;
     clearTimeout(saveTimer);
@@ -165,6 +165,14 @@
     // Existing active runs may still be updated until the grain draft is saved.
     if(!activeRunId()&&TIMES.every((_,i)=>
       String(form.elements[`sed_r_${i}`]?.value??'').trim()!==''))return;
+    // Immediately back up the 24-hour field, even before the user taps Save
+    // or navigates away. Finalize when the input is committed or settles.
+    if(event?.target?.name===`sed_r_${TIMES.length-1}`){
+      const run=ensureRun();
+      if(event.type==='change'&&run&&readingsComplete(run.fields)){
+        autoSaveCompletedSedimentation(run);return;
+      }
+    }
     saveTimer=setTimeout(()=>{
       const run=ensureRun();if(!run)return;
       if(!run.startAt){
@@ -175,8 +183,9 @@
           if(x&&!x.startAt){x.startAt=inferStartAtFromClock(fields.sedStartTime)||new Date().toISOString();x.status='active';x.updatedAt=new Date().toISOString();saveRuns(runs);}
         }
       }
+      if(readingsComplete(run.fields)&&autoSaveCompletedSedimentation(run))return;
       updateWorkbenchButton();renderWorkbench();
-    },180);
+    },450);
   }
 
   function injectSampleContainer(){
@@ -283,6 +292,145 @@
     updateWorkbenchButton();renderWorkbench();
   }
 
+
+  // Complete hydrometer readings are written into the corresponding grain
+  // test, not only the workbench cache. This also works when another project
+  // is currently on screen.
+  function matchingGrainTest(run,project){
+    const sample=String(run.fields?.sample||run.sample||'').trim();
+    const container=String(run.fields?.[SAMPLE_CONTAINER]||run.sampleContainerNo||'').trim();
+    const byId=(project.tests||[]).find(t=>t.type==='grain'&&t.id===run.grainTestId);
+    if(byId)return byId;
+    if(!sample)return null;
+    const candidates=(project.tests||[]).filter(t=>t.type==='grain'&&String(t.sample||'').trim()===sample);
+    const storedContainer=t=>String(t.draftFields?.[SAMPLE_CONTAINER]
+      ||t.sedimentationInputFields?.[SAMPLE_CONTAINER]
+      ||t.sedimentation?.settings?.sampleContainerNo||'').trim();
+    const exact=candidates.filter(t=>container&&storedContainer(t)===container);
+    if(exact.length===1)return exact[0];
+    if(exact.length>1)return null;
+    // Only infer from a sample name when it uniquely identifies the test.
+    if(candidates.length===1&&!storedContainer(candidates[0]))return candidates[0];
+    return null;
+  }
+
+  function mergedReadingFields(run,test){
+    const fields={...(test?.draftFields||test?.sedimentationInputFields||{})};
+    Object.entries(run.fields||{}).forEach(([name,value])=>{
+      if(typeof value==='boolean'||String(value??'').trim()!==''||!(name in fields))fields[name]=value;
+    });
+    fields.useSedimentation=true;
+    fields.sample=String(run.fields?.sample||run.sample||test?.sample||'').trim();
+    const hasValue=value=>value!==null&&value!==undefined&&String(value).trim()!=='';
+    if(!hasValue(fields.fineDryMass)){
+      const mass=[test?.draftFields?.fineDryMass,test?.grainMassBackup?.fineDryMass,
+        test?.sedimentation?.settings?.ms1].find(hasValue);
+      if(hasValue(mass))fields.fineDryMass=String(mass);
+    }
+    if(!hasValue(fields.twoMmPassRatio)){
+      const prior=test?.sedimentation?.settings?.twoMmPassRatio;
+      if(hasValue(prior))fields.twoMmPassRatio=String(prior);
+      else if(Number(test?.totalDryMass)>0&&Array.isArray(test?.sieves)){
+        const retained=test.sieves.filter(row=>Number(row.size)>=2&&row.retained!=null)
+          .reduce((sum,row)=>sum+Number(row.retained||0),0);
+        fields.twoMmPassRatio=String(Math.max(0,Math.min(100,
+          (Number(test.totalDryMass)-retained)/Number(test.totalDryMass)*100)));
+      }
+    }
+    return fields;
+  }
+
+  function sedimentationFromSnapshot(fields){
+    if(typeof getSedimentationPayloadExt!=='function')return null;
+    const elements={};
+    Object.entries(fields).forEach(([name,value])=>{
+      elements[name]={value:typeof value==='boolean'?'':String(value??''),checked:Boolean(value)};
+    });
+    elements.useSedimentation={value:'on',checked:true};
+    try{return getSedimentationPayloadExt({elements});}
+    catch(error){console.warn('沈降分析の自動計算に失敗しました',error);return null;}
+  }
+
+  function showAutoSaveNotice(message,isError=false){
+    let notice=document.getElementById('sedAutoSaveNotice');
+    if(!notice){
+      notice=document.createElement('div');
+      notice.id='sedAutoSaveNotice';
+      notice.setAttribute('role','status');
+      notice.style.cssText='position:fixed;z-index:10090;bottom:calc(18px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);max-width:calc(100vw - 24px);padding:11px 16px;border-radius:12px;color:white;font-size:13px;font-weight:800;box-shadow:0 6px 24px rgba(0,0,0,.25);text-align:center;';
+      document.body.appendChild(notice);
+    }
+    notice.textContent=message;
+    notice.style.background=isError?'#a53636':'#17634b';
+    notice.style.display='block';
+    clearTimeout(showAutoSaveNotice.timer);
+    showAutoSaveNotice.timer=setTimeout(()=>{notice.style.display='none';},3600);
+  }
+
+  function autoSaveCompletedSedimentation(run,{notify=true}={}){
+    if(!run||!readingsComplete(run.fields))return false;
+    const project=projectById(run.projectId);
+    if(!project)return false;
+    const sample=String(run.fields?.sample||run.sample||'').trim();
+    if(!sample)return false;
+    if(run.status==='finished')return true;
+    const now=new Date().toISOString();
+    let test=matchingGrainTest(run,project);
+    const fields=mergedReadingFields(run,test);
+    const payload=sedimentationFromSnapshot(fields);
+    const wasDraft=Boolean(test?.draft);
+    if(!test){
+      test={
+        id:uidLocal(),type:'grain',sample,draft:true,
+        draftFields:fields,draftSavedAt:now,createdAt:now,updatedAt:now
+      };
+      project.tests=project.tests||[];
+      project.tests.push(test);
+    }else if(wasDraft){
+      test.draftFields=fields;
+      test.draftSavedAt=now;
+      test.updatedAt=now;
+    }else{
+      test.updatedAt=now;
+    }
+    test.sedimentationInputFields=fields;
+    test.sedimentationAutoSavedAt=now;
+    if(payload?.valid){
+      payload.settings.sampleContainerNo=String(fields[SAMPLE_CONTAINER]||'').trim();
+      test.sedimentation=payload;
+      delete test.sedimentationPendingFields;
+    }else{
+      test.sedimentationPendingFields=fields;
+    }
+    project.updatedAt=now;
+    try{
+      saveData();
+    }catch(error){
+      console.error('24時間測定値の自動保存に失敗しました',error);
+      if(notify)showAutoSaveNotice('⚠ 自動保存に失敗しました。進行中の記録から再操作してください。',true);
+      return false;
+    }
+
+    // Keep the workbench's original reading snapshot as a second local
+    // backup, but remove this completed run from the active queue.
+    const runs=loadRuns(),stored=runById(run.id,runs);
+    if(stored){
+      stored.status='finished';stored.grainTestId=test.id;
+      stored.savedAt=now;stored.updatedAt=now;
+      try{saveRuns(runs);}catch(error){console.warn('沈降分析バックアップの保存に失敗しました',error);}
+    }
+    const form=document.getElementById('grainForm');
+    if(form?.dataset?.sedRunId===run.id)delete form.dataset.sedRunId;
+    clearTimeout(saveTimer);
+    if(current()?.id===project.id)try{renderTests();}catch{}
+    try{renderProjects();}catch{}
+    updateWorkbenchButton();renderWorkbench();
+    if(notify)showAutoSaveNotice(payload?.valid
+      ?'✓ 24時間の測定値を自動保存し、粒度試験に反映しました'
+      :'✓ 24時間の測定値を粒度試験に途中保存しました（計算条件は要確認）');
+    return true;
+  }
+
   function directSave(runId,index,value){
     const runs=loadRuns();const run=runById(runId,runs);if(!run)return;
     const text=String(value||'').trim();if(!text)return;
@@ -294,6 +442,7 @@
     if(form?.dataset?.sedRunId===runId&&form.elements[`sed_r_${index}`]){
       form.elements[`sed_r_${index}`].value=text;form.dispatchEvent(new Event('input',{bubbles:true}));
     }
+    if(readingsComplete(run.fields)&&autoSaveCompletedSedimentation(run))return;
     renderWorkbench();updateWorkbenchButton();
   }
 
@@ -439,6 +588,19 @@
         const form=document.getElementById('grainForm');if(!form||!t)return;
         if(t.sedimentation?.settings?.sampleContainerNo)form.elements[SAMPLE_CONTAINER].value=t.sedimentation.settings.sampleContainerNo;
         delete form.dataset.sedRunId;
+        // A completed set of readings may have been auto-saved before all
+        // calculation settings were available. Restore them for corrections.
+        if(!t.draft&&t.sedimentationPendingFields){
+          const names=[SAMPLE_CONTAINER,'cylinderNo','hydrometerNo','particleDensity',
+            'sedWaterTemp','sedStartTime','sedCorrectionF','dispersant',
+            'solutionAddition','fineDryMass',...TIMES.map((_,i)=>`sed_r_${i}`)];
+          const pending={useSedimentation:true};
+          names.forEach(name=>{
+            const value=t.sedimentationPendingFields[name];
+            if(value!==undefined&&value!==null&&String(value).trim()!=='')pending[name]=value;
+          });
+          applyFields(pending);
+        }
         if(t.sedimentation?.enabled){
           // Viewing a completed saved test is not a new sedimentation run.
           const runs=loadRuns();
@@ -489,6 +651,11 @@
     });
     // "Add grain" must open a blank test, not silently restore another run.
     document.getElementById('addGrainBtn')?.addEventListener('click',()=>setTimeout(()=>{injectSampleContainer();injectStartControl();},0));
+    // Recover 8/8 workbench snapshots that were recorded before this update.
+    setTimeout(()=>{
+      loadRuns().filter(run=>run.status!=='finished'&&readingsComplete(run.fields)
+        &&!isSavedComplete(run)).forEach(run=>autoSaveCompletedSedimentation(run,{notify:false}));
+    },0);
     renderTimer=setInterval(()=>{if(document.getElementById('sedWorkbenchDialog')?.open)renderWorkbench();updateWorkbenchButton();},1000);
   }
 
