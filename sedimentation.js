@@ -109,18 +109,18 @@ function buildSedimentationRows() {
   `).join('');
 }
 
-function sedimentationSettingsExt() {
-  const cylinderNo = grainForm.elements.cylinderNo?.value.trim() ?? '';
-  const hydrometerNo = grainForm.elements.hydrometerNo?.value.trim() || '1';
-  const fineMassRaw = grainForm.elements.fineDryMass?.value ?? grainForm.elements.sedDryMass?.value ?? '';
+function sedimentationSettingsExt(inputForm = grainForm) {
+  const cylinderNo = inputForm.elements.cylinderNo?.value.trim() ?? '';
+  const hydrometerNo = inputForm.elements.hydrometerNo?.value.trim() || '1';
+  const fineMassRaw = inputForm.elements.fineDryMass?.value ?? inputForm.elements.sedDryMass?.value ?? '';
   const ms1 = Number(fineMassRaw);
-  const rhoS = Number(grainForm.elements.particleDensity?.value);
-  const temp = Number(grainForm.elements.sedWaterTemp?.value);
-  const correctionF = Number(grainForm.elements.sedCorrectionF?.value);
-  const startTime = grainForm.elements.sedStartTime?.value || '';
-  const ratio = Number(grainForm.elements.twoMmPassRatio?.value);
-  const dispersant = grainForm.elements.dispersant?.value.trim() ?? '';
-  const solutionAddition = Number(grainForm.elements.solutionAddition?.value);
+  const rhoS = Number(inputForm.elements.particleDensity?.value);
+  const temp = Number(inputForm.elements.sedWaterTemp?.value);
+  const correctionF = Number(inputForm.elements.sedCorrectionF?.value);
+  const startTime = inputForm.elements.sedStartTime?.value || '';
+  const ratio = Number(inputForm.elements.twoMmPassRatio?.value);
+  const dispersant = inputForm.elements.dispersant?.value.trim() ?? '';
+  const solutionAddition = Number(inputForm.elements.solutionAddition?.value);
   const rhoW = sedWaterDensity(temp);
   const cal = SED_HYDROMETER_CAL[hydrometerNo] || SED_HYDROMETER_CAL['1'];
   const valid = [ms1, rhoS, temp, correctionF, ratio, rhoW].every(Number.isFinite)
@@ -134,14 +134,14 @@ function sedimentationSettingsExt() {
   };
 }
 
-function readSedimentationRowsExt(settings) {
+function readSedimentationRowsExt(settings, inputForm = grainForm) {
   const eta = sedWaterViscosity(settings.temp);
   const K = settings.valid && Number.isFinite(eta)
     ? Math.sqrt((30 * eta) / (SED_GN * (settings.rhoS - settings.rhoW)) * 1e-5)
     : null;
 
   return SED_TIMES_EXT.map((t, i) => {
-    const raw = grainForm.elements[`sed_r_${i}`]?.value.trim() ?? '';
+    const raw = inputForm.elements[`sed_r_${i}`]?.value.trim() ?? '';
     const clock = addMinutesToClock(settings.startTime, t);
     if (raw === '') return { t, entered: false, valid: false, clock, r: null };
     const r = sedNormalizeHydrometerReading(raw);
@@ -210,10 +210,10 @@ function updateSedimentationPreview() {
   }
 }
 
-function getSedimentationPayloadExt() {
-  if (!useSedimentationEl?.checked) return { enabled: false };
-  const settings = sedimentationSettingsExt();
-  const rows = readSedimentationRowsExt(settings);
+function getSedimentationPayloadExt(inputForm = grainForm) {
+  if (!inputForm.elements.useSedimentation?.checked) return { enabled: false };
+  const settings = sedimentationSettingsExt(inputForm);
+  const rows = readSedimentationRowsExt(settings, inputForm);
   if (!settings.valid) return { enabled: true, valid: false, reason: 'settings' };
   const entered = rows.filter(r => r.entered);
   if (entered.length !== 8 || entered.some(r => !r.valid)) return { enabled: true, valid: false, reason: 'rows' };
