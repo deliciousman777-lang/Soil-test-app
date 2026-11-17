@@ -65,6 +65,51 @@
     return next;
   }
 
+  // 一軸圧縮試験：共有端末の新しい空欄データで、既存の測定値を消さない。
+  function preserveUnconfined(newer,older){
+    const next=clone(newer);
+    if(next?.type!=='unconfined-compression'||older?.type!=='unconfined-compression')return next;
+    const has=v=>v!==null&&v!==undefined&&String(v).trim()!=='';
+    const addMissing=(target,source)=>{
+      if(!source||typeof source!=='object')return target;
+      const result={...(target&&typeof target==='object'?target:{})};
+      Object.entries(source).forEach(([key,value])=>{
+        if(!has(result[key])&&has(value))result[key]=clone(value);
+      });
+      return result;
+    };
+    if(Array.isArray(older.specimens)){
+      if(!Array.isArray(next.specimens))next.specimens=clone(older.specimens);
+      else next.specimens=older.specimens.map((prior,i)=>{
+        if(!prior)return next.specimens[i]||prior;
+        const current=next.specimens[i]||{};
+        return {...addMissing(current,prior),
+          moisture:addMissing(current.moisture,prior.moisture),
+          sketch:Array.isArray(current.sketch)&&current.sketch.length?current.sketch:clone(prior.sketch||[])};
+      }).concat(next.specimens.slice(older.specimens.length));
+    }
+    if(next.draft){
+      next.draftFields=addMissing(next.draftFields,older.draftFields);
+      if(older.draftExtra?.cache&&typeof older.draftExtra.cache==='object'){
+        const extra={...(next.draftExtra||{})};
+        const cache={...(extra.cache||{})};
+        Object.entries(older.draftExtra.cache).forEach(([level,previous])=>{
+          const current=cache[level];
+          if(!current){cache[level]=clone(previous);return;}
+          cache[level]={...current,fields:addMissing(current.fields,previous?.fields),
+            sketches:[0,1,2].map(i=>{
+              const a=current.sketches?.[i],b=previous?.sketches?.[i];
+              return Array.isArray(a)&&a.length?a:clone(b||[]);
+            })};
+        });
+        extra.cache=cache;
+        extra.levels=[...new Set([...(extra.levels||[]),...(older.draftExtra.levels||[])])];
+        next.draftExtra=extra;
+      }
+    }
+    return next;
+  }
+
   function mergeProjects(a,b){
     if(!a)return clone(b);
     if(!b)return clone(a);
@@ -77,7 +122,7 @@
         if(!old){merged.set(key,clone(t));return;}
         const newer=testStamp(t)>=testStamp(old)?t:old;
         const older=newer===t?old:t;
-        merged.set(key,preserveGrainMass(newer,older));
+        merged.set(key,preserveUnconfined(preserveGrainMass(newer,older),older));
       });
     };
     add(a.tests);add(b.tests);
