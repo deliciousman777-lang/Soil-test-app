@@ -354,6 +354,46 @@
     },true);
   }
 
+  // 復旧補助：同一試料の複数の途中保存に分散した入力値を読込時に統合する。
+  // この処理では保存済みデータやクラウドを変更しない。
+  function recoverDraftLevels(sample,original){
+    const recovered=new Map();
+    const has=v=>v!==null&&v!==undefined&&String(v).trim()!=='';
+    const absorb=(level,snapshot)=>{
+      const key=levelKey(level);if(!key||!snapshot)return;
+      const current=recovered.get(key)||{fields:{},sketches:[[],[],[]]};
+      Object.entries(snapshot.fields||{}).forEach(([name,value])=>{
+        if(['sample','dosage','dosageManual'].includes(name)||typeof value==='object')return;
+        if(has(value)&&!has(current.fields[name]))current.fields[name]=value;
+      });
+      [0,1,2].forEach(i=>{
+        const strokes=snapshot.sketches?.[i];
+        if((!current.sketches[i]||!current.sketches[i].length)&&Array.isArray(strokes)&&strokes.length){
+          current.sketches[i]=clone(strokes);
+        }
+      });
+      recovered.set(key,current);
+    };
+    const p=typeof currentProject==='function'?currentProject():null;
+    const related=[...(p?.tests||[])]
+      .filter(t=>t.type===TYPE&&String(t.sample||'')===String(sample||''))
+      .sort((a,b)=>String(b.updatedAt||b.draftSavedAt||b.createdAt||'')
+        .localeCompare(String(a.updatedAt||a.draftSavedAt||a.createdAt||'')));
+    related.forEach(t=>{
+      Object.entries(t.draftExtra?.cache||{}).forEach(([key,snap])=>absorb(key,snap));
+      if(t.draftFields){
+        absorb(t.draftExtra?.active||t.draftFields.dosage||t.dosage,{
+          fields:t.draftFields,sketches:t.draftExtra?.sketches||[]
+        });
+      }
+      if(n(t.dosage)!==null&&Array.isArray(t.specimens)){
+        absorb(t.dosage,testSnapshot(t));
+      }
+    });
+    Object.entries(original?.cache||{}).forEach(([key,snap])=>absorb(key,snap));
+    return recovered;
+  }
+
   // 破壊スケッチはフォーム要素ではないので、途中保存時に線データも退避する。
 
   window.SoilNoteUnconfinedDraft={
@@ -368,8 +408,11 @@
         return;
       }
       if(!data||typeof data!=='object')return;
-      levelValues=Array.isArray(data.levels)&&data.levels.length?data.levels.map(n).filter(v=>v!==null):doseChoices(form()?.elements.sample.value||'');
-      levelCache=new Map(Object.entries(data.cache||{}));
+      const sample=form()?.elements.sample.value||'';
+      const recovered=recoverDraftLevels(sample,data);
+      const initial=Array.isArray(data.levels)&&data.levels.length?data.levels:doseChoices(sample);
+      levelValues=[...new Set([...initial,...recovered.keys()].map(n).filter(v=>v!==null))].sort((a,b)=>a-b);
+      levelCache=recovered;
       const f=form(),sel=f?.elements.dosage;
       if(sel){
         levelValues.forEach(v=>{
