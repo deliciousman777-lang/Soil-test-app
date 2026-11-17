@@ -320,6 +320,29 @@
     return null;
   }
 
+  // The grain draft button must reuse the test already created by the
+  // 24-hour autosave. Previously it could create a second 'grain' test.
+  function resolveGrainDraft(fields,projectId){
+    const project=projectById(projectId);if(!project||!readingsComplete(fields))return null;
+    const sample=String(fields.sample||'').trim();
+    const container=String(fields[SAMPLE_CONTAINER]||'').trim();
+    const active=runById(activeRunId());
+    if(active?.projectId===projectId){
+      const linked=matchingGrainTest(active,project);
+      if(linked)return linked;
+    }
+    const storedContainer=test=>String(test.draftFields?.[SAMPLE_CONTAINER]
+      ||test.sedimentationInputFields?.[SAMPLE_CONTAINER]
+      ||test.sedimentation?.settings?.sampleContainerNo||'').trim();
+    const candidates=(project.tests||[]).filter(test=>
+      test.type==='grain'&&test.sedimentationAutoSavedAt
+      &&String(test.sample||'').trim()===sample
+      &&(!container||!storedContainer(test)||storedContainer(test)===container)
+      &&TIMES.every((_,i)=>String(test.sedimentationInputFields?.[`sed_r_${i}`]
+        ??test.draftFields?.[`sed_r_${i}`]??'').trim()===String(fields[`sed_r_${i}`]??'').trim()));
+    return candidates.length===1?candidates[0]:null;
+  }
+
   function mergedReadingFields(run,test){
     const fields={...(test?.draftFields||test?.sedimentationInputFields||{})};
     Object.entries(run.fields||{}).forEach(([name,value])=>{
@@ -677,6 +700,6 @@
     renderTimer=setInterval(()=>{if(document.getElementById('sedWorkbenchDialog')?.open)renderWorkbench();updateWorkbenchButton();},1000);
   }
 
-  window.SoilNoteSedimentationWorkbench={onGrainDraftSaved};
+  window.SoilNoteSedimentationWorkbench={onGrainDraftSaved,resolveGrainDraft};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
