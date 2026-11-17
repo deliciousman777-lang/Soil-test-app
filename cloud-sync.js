@@ -69,7 +69,33 @@
     });
     const before=JSON.stringify(Array.isArray(base.tests)?base.tests:[]);
     base.tests=tests;
-    if(JSON.stringify(tests)!==before)base.updatedAt=new Date().toISOString();
+
+    // Sedimentation workbench runs are part of the shared project, rather
+    // than local-only state. Merge by stable run ID and update timestamp so
+    // concurrent readings from different devices do not discard other runs.
+    const runs=new Map();
+    const mergeRunList=list=>{
+      (Array.isArray(list)?list:[]).forEach(run=>{
+        if(!run?.id)return;
+        const key=String(run.id);
+        const old=runs.get(key);
+        const incoming=timeOf(run.updatedAt||run.createdAt);
+        const previous=timeOf(old?.updatedAt||old?.createdAt);
+        if(!old||incoming>previous
+          ||(incoming===previous&&run.status==='finished'&&old.status!=='finished')){
+          runs.set(key,clone(run));
+        }
+      });
+    };
+    mergeRunList(a.sedimentationRuns);
+    mergeRunList(b.sedimentationRuns);
+    const sedimentationRuns=[...runs.values()].sort((x,y)=>String(x.id).localeCompare(String(y.id)));
+    const beforeRuns=JSON.stringify(Array.isArray(base.sedimentationRuns)?base.sedimentationRuns:[]);
+    if(sedimentationRuns.length||beforeRuns!=='[]')base.sedimentationRuns=sedimentationRuns;
+    if(JSON.stringify(tests)!==before
+      ||JSON.stringify(sedimentationRuns)!==beforeRuns){
+      base.updatedAt=new Date().toISOString();
+    }
     return base;
   }
 
