@@ -150,6 +150,20 @@
     const sample=String(fields.sample??'').trim();
     let test=state.editingTestId?testById(state.editingTestId):null;
     if(test&&test.type!==cfg.type)test=null;
+    if(!test&&cfg.type==='grain'){
+      const draftId=form.dataset.draftTestId;
+      const linked=draftId?testById(draftId):null;
+      if(linked?.type==='grain')test=linked;
+      else test=window.SoilNoteSedimentationWorkbench?.resolveGrainDraft?.(fields,p.id)||null;
+    }
+    // Preserve valid readings in the auto-saved test even if a stale
+    // grain form is saved after the 24-hour measurement has finished.
+    if(cfg.type==='grain'&&test?.sedimentationAutoSavedAt){
+      for(const [name,old] of Object.entries(test.sedimentationInputFields||{})){
+        if(!String(old??'').trim()||name==='sample')continue;
+        if(!String(fields[name]??'').trim())fields[name]=old;
+      }
+    }
     const grainMassBackup=cfg.type==='grain'?protectGrainMassDraft(fields,test):null;
     const draftExtra=cfg.type==='unconfined-compression'?window.SoilNoteUnconfinedDraft?.snapshot?.():null;
 
