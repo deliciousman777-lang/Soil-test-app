@@ -11,13 +11,63 @@
   const esc=v=>typeof escapeHtml==='function'?escapeHtml(v):String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
   const uidLocal=()=>typeof uid==='function'?uid():`${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
-  function loadRuns(){
+  function localRuns(){
     try{
       const x=JSON.parse(localStorage.getItem(STORAGE_KEY));
       return Array.isArray(x)?x:[];
     }catch{return [];}
   }
-  function saveRuns(runs){localStorage.setItem(STORAGE_KEY,JSON.stringify(runs));}
+  function runStamp(run){
+    const n=new Date(run?.updatedAt||run?.createdAt||0).getTime();
+    return Number.isFinite(n)?n:0;
+  }
+  function mergeRunLists(lists){
+    const map=new Map();
+    lists.forEach(list=>(Array.isArray(list)?list:[]).forEach(run=>{
+      if(!run?.id||!run.projectId)return;
+      const key=String(run.id);
+      const old=map.get(key);
+      const incoming=runStamp(run),previous=runStamp(old);
+      if(!old||incoming>previous
+        ||(incoming===previous&&run.status==='finished'&&old.status!=='finished')){
+        map.set(key,run);
+      }
+    }));
+    return [...map.values()].sort((a,b)=>String(a.id).localeCompare(String(b.id)));
+  }
+  function loadRuns(){
+    // A project is already shared by cloud-sync.js. Include its live runs,
+    // then reconcile with this device's offline cache by ID and timestamp.
+    const projects=Array.isArray(state?.data?.projects)?state.data.projects:[];
+    return mergeRunLists([localRuns(),...projects.map(p=>p.sedimentationRuns)]);
+  }
+  function saveRuns(runs){
+    const now=new Date().toISOString();
+    const existing=loadRuns(),wanted=new Map();
+    (Array.isArray(runs)?runs:[]).forEach(run=>{if(run?.id)wanted.set(String(run.id),run);});
+    // A removed run becomes a finished tombstone so another device cannot
+    // resurface it from a cached copy during the next cloud merge.
+    const next=existing.map(run=>wanted.has(String(run.id))
+      ?wanted.get(String(run.id))
+      :{...run,status:'finished',updatedAt:now});
+    for(const run of wanted.values()){
+      if(!existing.some(old=>String(old.id)===String(run.id)))next.push(run);
+    }
+    const unified=mergeRunLists([next]);
+    localStorage.setItem(STORAGE_KEY,JSON.stringify(unified));
+    let changed=false;
+    const projects=Array.isArray(state?.data?.projects)?state.data.projects:[];
+    projects.forEach(project=>{
+      const related=unified.filter(run=>run.projectId===project.id);
+      const current=Array.isArray(project.sedimentationRuns)?project.sedimentationRuns:[];
+      if(JSON.stringify(related)!==JSON.stringify(current)){
+        project.sedimentationRuns=related.map(run=>({...run}));
+        project.updatedAt=now;
+        changed=true;
+      }
+    });
+    if(changed&&typeof saveData==='function')saveData();
+  }
   function projectById(id){
     try{return state?.data?.projects?.find(p=>p.id===id)||null;}catch{return null;}
   }
@@ -112,7 +162,7 @@
       const matches=runs.filter(r=>r.projectId===p.id
         &&String(r.fields?.sample||r.sample||'').trim()===sample
         &&String(r.fields?.[SAMPLE_CONTAINER]||r.sampleContainerNo||'').trim()===container
-        &&r.status!=='finished');
+        &&r.status!=='finished'&&r.status!=='deleted');
       if(matches.length===1)run=matches[0];
     }
     if(!run){
@@ -241,7 +291,7 @@
   function updateWorkbenchButton(){
     const btn=document.getElementById('openSedWorkbenchBtn');if(!btn)return;
     const runs=loadRuns();
-    const active=runs.filter(r=>r.status!=='finished'&&!isSavedComplete(r)).length;
+    const active=runs.filter(r=>r.status!=='finished'&&r.status!=='deleted'&&!isSavedComplete(r)).length;
     btn.textContent=`⏱ 沈降進行中 ${active}`;
     btn.classList.toggle('has-active',active>0);
   }
@@ -264,7 +314,7 @@
 
   function renderWorkbench(){
     const root=document.getElementById('sedWorkbenchList');if(!root)return;
-    const runs=loadRuns().filter(r=>r.status!=='finished'&&!isSavedComplete(r));
+    const runs=loadRuns().filter(r=>r.status!=='finished'&&r.status!=='deleted'&&!isSavedComplete(r));
     runs.sort((a,b)=>{
       const ai=nextIndex(a),bi=nextIndex(b);const ad=dueAt(a,ai)??Infinity,bd=dueAt(b,bi)??Infinity;return ad-bd;
     });
@@ -549,7 +599,7 @@
 
   function restoreLatestForCurrentProject(){
     const form=document.getElementById('grainForm');const p=current();if(!form||!p)return;
-    const runs=loadRuns().filter(r=>r.projectId===p.id&&r.status!=='finished'&&!isSavedComplete(r)).sort((a,b)=>String(b.updatedAt||'').localeCompare(String(a.updatedAt||'')));
+    const runs=loadRuns().filter(r=>r.projectId===p.id&&r.status!=='finished'&&r.status!=='deleted'&&!isSavedComplete(r)).sort((a,b)=>String(b.updatedAt||'').localeCompare(String(a.updatedAt||'')));
     if(runs.length!==1)return;
     const run=runs[0];form.dataset.sedRunId=run.id;applyFields(run.fields);
   }
@@ -723,7 +773,7 @@
           const runs=loadRuns();
           const run=runs.find(r=>r.projectId===p.id&&r.grainTestId===t.id)
             ||runs.find(r=>r.projectId===p.id&&String(r.fields?.sample||'')===String(t.sample||'')
-              &&r.status!=='finished');
+              &&r.status!=='finished'&&r.status!=='deleted');
           if(run){run.grainTestId=t.id;form.dataset.sedRunId=run.id;saveRuns(runs);}
         }
       };
@@ -782,9 +832,14 @@
     document.getElementById('addGrainBtn')?.addEventListener('click',()=>setTimeout(()=>{injectSampleContainer();injectStartControl();},0));
     // Recover 8/8 workbench snapshots that were recorded before this update.
     setTimeout(()=>{
-      loadRuns().filter(run=>run.status!=='finished'&&readingsComplete(run.fields)
+      loadRuns().filter(run=>run.status!=='finished'&&run.status!=='deleted'&&readingsComplete(run.fields)
         &&!isSavedComplete(run)).forEach(run=>autoSaveCompletedSedimentation(run,{notify:false}));
     },0);
+    // Publish workbench runs saved before shared progress was introduced.
+    // Both coworkers need to reopen the updated app once for their existing
+    // local measurements to be available to the other device.
+    if(localRuns().length)try{saveRuns(loadRuns());}
+      catch(error){console.warn('進行中の沈降分析を共有できませんでした',error);}
     renderTimer=setInterval(()=>{if(document.getElementById('sedWorkbenchDialog')?.open)renderWorkbench();updateWorkbenchButton();},1000);
   }
 
