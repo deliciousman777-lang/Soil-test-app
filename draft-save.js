@@ -255,7 +255,9 @@
         }
         if(form.dataset.finalSubmitPending==='1'&&id){
           const t=testById(id);
-          if(t?.draft){
+          // 一軸の水準別途中保存は、元フォームの保存処理だけが完了判定する。
+          // 共通処理で draftFields / draftExtra を削除すると他水準の入力値まで失われる。
+          if(t?.draft&&cfg.type!=='unconfined-compression'){
             clearDraftMeta(t);
             saveData();
             renderTests();
@@ -281,7 +283,7 @@
           const activeDialog=document.getElementById(cfg.dialog);
           if(activeDialog?.open)return;
           const t=testById(id);
-          if(!t?.draft)return;
+          if(!t?.draft||cfg.type==='unconfined-compression')return;
           if(clearDraftMeta(t)){
             saveData();
             renderTests();
