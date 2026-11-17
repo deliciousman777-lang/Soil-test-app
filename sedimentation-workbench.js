@@ -164,7 +164,13 @@
     // All 8 readings are complete: reopening a draft must not spawn a new run.
     // Existing active runs may still be updated until the grain draft is saved.
     if(!activeRunId()&&TIMES.every((_,i)=>
-      String(form.elements[`sed_r_${i}`]?.value??'').trim()!==''))return;
+      String(form.elements[`sed_r_${i}`]?.value??'').trim()!=='')){
+      // Restoring an already-saved test should not create a second run;
+      // entering all 8 readings for the first time still must be saved.
+      const existing=current()?.tests?.find(t=>t.type==='grain'&&t.id===state?.editingTestId);
+      if(existing&&(existing.sedimentation?.valid
+        ||(existing.draft&&readingsComplete(existing.draftFields))))return;
+    }
     // Immediately back up the 24-hour field, even before the user taps Save
     // or navigates away. Finalize when the input is committed or settles.
     if(event?.target?.name===`sed_r_${TIMES.length-1}`){
@@ -505,6 +511,12 @@
 
   function removeRun(runId){
     const run=runById(runId);if(!run)return;
+    // Never let a misplaced Delete tap discard the last, completed reading.
+    if(readingsComplete(run.fields)&&!isSavedComplete(run)){
+      if(autoSaveCompletedSedimentation(run))return;
+      alert('24時間までの記録を粒度試験へ自動保存できないため、削除を中止しました。');
+      return;
+    }
     const label=runLabel(run);
     if(!confirm(`${label.sample}（試料容器 No.${label.container||'—'}）を進行中一覧から削除しますか？\n保存済みの完成試験データは削除しません。`))return;
     const runs=loadRuns().filter(r=>r.id!==runId);saveRuns(runs);
@@ -617,8 +629,14 @@
       const base=renderGrainCard;
       const wrapped=function(test){
         let html=base(test);if(test?.draft)return html;
-        const no=test?.sedimentation?.settings?.sampleContainerNo;
-        if(no&&test?.sedimentation?.enabled)html+=`<div class="grain-wash-card-meta">沈降分析前 試料容器 No.${esc(no)}</div>`;
+        const no=test?.sedimentation?.settings?.sampleContainerNo
+          ||test?.sedimentationInputFields?.[SAMPLE_CONTAINER];
+        if(no&&(test?.sedimentation?.enabled||test?.sedimentationInputFields)){
+          html+=`<div class="grain-wash-card-meta">沈降分析前 試料容器 No.${esc(no)}</div>`;
+        }
+        if(test?.sedimentationPendingFields){
+          html+='<div class="grain-wash-card-meta">✓ 沈降8点自動保存済み（計算条件を確認してください）</div>';
+        }
         return html;
       };
       wrapped.__sedWorkbenchPatched=true;renderGrainCard=wrapped;
