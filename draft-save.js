@@ -159,6 +159,7 @@
     // Preserve valid readings in the auto-saved test even if a stale
     // grain form is saved after the 24-hour measurement has finished.
     if(cfg.type==='grain'&&test?.sedimentationAutoSavedAt){
+      fields.useSedimentation=true;
       for(const [name,old] of Object.entries(test.sedimentationInputFields||{})){
         if(!String(old??'').trim()||name==='sample')continue;
         if(!String(fields[name]??'').trim())fields[name]=old;
