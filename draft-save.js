@@ -156,13 +156,31 @@
       if(linked?.type==='grain')test=linked;
       else test=window.SoilNoteSedimentationWorkbench?.resolveGrainDraft?.(fields,p.id)||null;
     }
-    // Preserve valid readings in the auto-saved test even if a stale
-    // grain form is saved after the 24-hour measurement has finished.
-    if(cfg.type==='grain'&&test?.sedimentationAutoSavedAt){
-      fields.useSedimentation=true;
-      for(const [name,old] of Object.entries(test.sedimentationInputFields||{})){
-        if(!String(old??'').trim()||name==='sample')continue;
-        if(!String(fields[name]??'').trim())fields[name]=old;
+    // 端末同期・古い画面・途中保存の空欄で沈降の生の読みを消さない。
+    // 同じ試験IDの既保存値のみ使用し、ユーザーが再入力した値は優先する。
+    if(cfg.type==='grain'&&test){
+      let hasSavedReading=false;
+      for(let i=0;i<8;i++){
+        const key='sed_r_'+i;
+        const candidates=[
+          test.sedimentationInputFields?.[key],
+          test.draftFields?.[key],
+          test.sedimentationPendingFields?.[key],
+          test.sedimentation?.rows?.[i]?.r
+        ];
+        const previous=candidates.find(v=>v!==null&&v!==undefined&&String(v).trim()!=='');
+        if(previous===undefined)continue;
+        hasSavedReading=true;
+        if(String(fields[key]??'').trim()==='')fields[key]=String(previous);
+      }
+      if(hasSavedReading){
+        fields.useSedimentation=true;
+        test.sedimentationInputFields={...(test.sedimentationInputFields||{})};
+        for(let i=0;i<8;i++){
+          const key='sed_r_'+i;
+          if(String(fields[key]??'').trim()!=='')test.sedimentationInputFields[key]=fields[key];
+        }
+        test.sedimentationInputFields.useSedimentation=true;
       }
     }
     const grainMassBackup=cfg.type==='grain'?protectGrainMassDraft(fields,test):null;
