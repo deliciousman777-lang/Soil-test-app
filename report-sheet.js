@@ -13,7 +13,14 @@
   }
 
   function sampleNames(project){
-    return [...new Set((project?.tests||[]).map(t=>String(t.sample||'').trim()).filter(Boolean))];
+    // 登録試料を優先し、旧保存データの試料も候補に含める。
+    const all=[...(project?.samples||[]).map(s=>s.name),...(project?.tests||[]).map(t=>t.sample)];
+    const names=new Map();
+    all.forEach(value=>{
+      const name=String(value||'').trim(),key=name.toLocaleLowerCase('ja-JP');
+      if(name&&!names.has(key))names.set(key,name);
+    });
+    return [...names.values()];
   }
 
   function moistureRows(test){
@@ -115,7 +122,11 @@
   function openReport(){
     const p=currentProject(); if(!p)return;
     const sel=document.getElementById('reportSampleSelect'); const names=sampleNames(p);
+    const selected=(p.samples||[]).find(s=>String(s.id)===String(p.activeSampleId||''))?.name||'';
+    const previous=sel.value;
     sel.innerHTML=names.length?names.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join(''):'<option value="">試料なし</option>';
+    if(selected&&names.includes(selected))sel.value=selected;
+    else if(previous&&names.includes(previous))sel.value=previous;
     renderReport(); document.getElementById('reportSheetDialog').showModal();
   }
 
