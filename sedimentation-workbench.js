@@ -842,6 +842,74 @@
     e.preventDefault();directSave(input.dataset.sedDirectInput,Number(input.dataset.index),input.value);
   });
 
+  // 消えた表示値を、同じ試料IDの「沈降進行中」ローカル/共有バックアップから救出する。
+  function recoverSavedReadings(){
+    const projects=Array.isArray(state?.data?.projects)?state.data.projects:[];
+    const runs=loadRuns();
+    let recovered=0;
+    projects.forEach(project=>{
+      const grainTests=(project.tests||[]).filter(t=>t.type==='grain');
+      grainTests.forEach(test=>{
+        const container=String(test.draftFields?.[SAMPLE_CONTAINER]
+          ||test.sedimentationInputFields?.[SAMPLE_CONTAINER]
+          ||test.sedimentation?.settings?.sampleContainerNo||'').trim();
+        const sample=String(test.sample||'').trim();
+        const candidates=runs.filter(run=>{
+          if(String(run.projectId)!==String(project.id))return false;
+          if(run.grainTestId)return String(run.grainTestId)===String(test.id);
+          const rSample=String(run.fields?.sample||run.sample||'').trim();
+          const rContainer=String(run.fields?.[SAMPLE_CONTAINER]||run.sampleContainerNo||'').trim();
+          // ID不明の場合は試料名と容器No.が両方一致し、候補が一意のときだけ。
+          return Boolean(sample&&container&&rSample===sample&&rContainer===container
+            &&grainTests.filter(x=>String(x.sample||'').trim()===sample).length===1);
+        }).sort((a,b)=>runStamp(b)-runStamp(a));
+        const previous={...(test.sedimentationInputFields||{})};
+        let sourceCount=0,changed=false;
+        for(let i=0;i<TIMES.length;i++){
+          const k='sed_r_'+i;
+          const old=[
+            test.sedimentationInputFields?.[k],
+            test.draftFields?.[k],
+            test.sedimentationPendingFields?.[k],
+            test.sedimentation?.rows?.[i]?.r
+          ].find(v=>v!==undefined&&v!==null&&String(v).trim()!=='');
+          const backup=candidates.map(r=>r.fields?.[k])
+            .find(v=>v!==undefined&&v!==null&&String(v).trim()!=='');
+          const value=old??backup;
+          if(value===undefined)continue;
+          if(String(previous[k]??'').trim()===''){
+            previous[k]=String(value);changed=true;
+            if(old===undefined&&backup!==undefined)sourceCount++;
+          }
+        }
+        if(!changed)return;
+        const best=candidates[0]?.fields||{};
+        for(const [key,value] of Object.entries(best)){
+          if(key==='sample'||value===undefined||value===null)continue;
+          if((previous[key]===undefined||String(previous[key]).trim()==='')&&String(value).trim()!=='')previous[key]=value;
+        }
+        previous.sample=sample;
+        previous.useSedimentation=true;
+        test.sedimentationInputFields=previous;
+        if(test.draft)test.draftFields=keepReadings(test.draftFields,previous);
+        if(!test.sedimentation?.valid){
+          const payload=readingsComplete(previous)?sedimentationFromSnapshot(previous):null;
+          if(payload?.valid){
+            payload.settings.sampleContainerNo=String(previous[SAMPLE_CONTAINER]||container);
+            test.sedimentation=payload;
+            delete test.sedimentationPendingFields;
+          }else{
+            test.sedimentationPendingFields=keepReadings(test.sedimentationPendingFields,previous);
+          }
+        }
+        test.updatedAt=new Date().toISOString();
+        project.updatedAt=test.updatedAt;
+        recovered+=sourceCount;
+      });
+    });
+    return recovered;
+  }
+
   function init(){
     injectSampleContainer();injectStartControl();injectWorkbench();patchEditAndCards();installFinalSaveHook();
     const form=document.getElementById('grainForm');
@@ -855,6 +923,15 @@
     });
     // "Add grain" must open a blank test, not silently restore another run.
     document.getElementById('addGrainBtn')?.addEventListener('click',()=>setTimeout(()=>{injectSampleContainer();injectStartControl();},0));
+    // 既存の途中記録・完了記録も読み直して、保存済みの粒度試験へ安全に救出。
+    try{
+      const count=recoverSavedReadings();
+      if(count>0){
+        saveData();
+        try{renderTests();}catch{}
+        showAutoSaveNotice(`✓ 沈降の読み ${count}件をバックアップから復元しました`);
+      }
+    }catch(error){console.warn('沈降読みの復旧確認に失敗しました',error);}
     // Recover 8/8 workbench snapshots that were recorded before this update.
     setTimeout(()=>{
       loadRuns().filter(run=>run.status!=='finished'&&run.status!=='deleted'&&readingsComplete(run.fields)
