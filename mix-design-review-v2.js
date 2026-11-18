@@ -52,10 +52,10 @@
     }).filter(r=>r.moldMass!==null||r.moldSoilMass!==null);
     const validDensities=densityMeasurements.filter(r=>finite(r.wetDensity));
     const wetDensity=validDensities.length===required
-      ? validDensities.reduce((sum,r)=>sum+r.wetDensity,0)/required:null;
+      ? Number((validDensities.reduce((sum,r)=>sum+r.wetDensity,0)/required).toFixed(3)):null;
     const batchSoilMass=asNum(f.batchSoilMass);
     const batchVolume=wetDensity!==null&&wetDensity>0&&batchSoilMass!==null&&batchSoilMass>0
-      ? batchSoilMass/wetDensity:null;
+      ? Number((batchSoilMass/wetDensity).toFixed(1)):null;
     const cementName=f.cementChoice==='__manual__'?f.cementManual:f.cementChoice;
     const additions=[1,2,3].map(i=>{
       const dosage=asNum(f['dosage'+i]);
@@ -104,7 +104,7 @@
 
   function additions(test,wetDensity){
     const batchSoilMass=finite(test.batchSoilMass)?Number(test.batchSoilMass):null;
-    const batchVolume=finite(test.batchVolume)?Number(test.batchVolume):(batchSoilMass!==null&&finite(wetDensity)&&Number(wetDensity)>0?batchSoilMass/Number(wetDensity):null);
+    const batchVolume=finite(test.batchVolume)?Number(test.batchVolume):(batchSoilMass!==null&&finite(wetDensity)&&Number(wetDensity)>0?Number((batchSoilMass/Number(Number(wetDensity).toFixed(3))).toFixed(1)):null);
     const rows=(Array.isArray(test.additions)?test.additions:[]).slice(0,3).map((r,i)=>{
       const dosage=finite(r?.dosage)?Number(r.dosage):null;
       const cementMass=finite(r?.cementMass)?Number(r.cementMass):(dosage!==null&&batchVolume!==null?(dosage/1000)*batchVolume:null);
