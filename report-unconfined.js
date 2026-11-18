@@ -159,10 +159,16 @@
     styles();
     const p=project(),sel=document.getElementById('reportSampleSelect');
     if(!root||!p||!sel||!root.querySelector('.report-page'))return;
+    const sample=sel.value||'';
     const existing=root.querySelector('#reportUnconfinedPage');
-    const arr=testRows(p,sel.value||'');
+    const arr=testRows(p,sample);
+    // ほかの試験シートの MutationObserver と再描画ループにならないようにする。
+    if(existing?.dataset.reportSample===sample){renumber(root);return;}
     if(existing)existing.remove();
-    if(arr.length)root.insertAdjacentHTML('beforeend',page(p,sel.value||'',arr));
+    if(arr.length){
+      root.insertAdjacentHTML('beforeend',page(p,sample,arr));
+      root.querySelector('#reportUnconfinedPage').dataset.reportSample=sample;
+    }
     renumber(root);
   }
 
