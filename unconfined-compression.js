@@ -27,8 +27,13 @@
     const sel=f.elements.sample;const list=samples();sel.innerHTML='';
     if(!list.length){sel.add(new Option('先に試料を登録してください',''));sel.disabled=true;return;}
     sel.disabled=false;list.forEach(s=>{const o=new Option(s.name,s.name);o.dataset.sampleId=s.id;sel.add(o);});
+    const p=typeof currentProject==='function'?currentProject():null;
     if(selected&&list.some(s=>s.name===selected))sel.value=selected;
-    else sel.selectedIndex=0;
+    else {
+      const active=list.find(s=>s.id===String(p?.activeSampleId||''));
+      if(active)sel.value=active.name;
+      else sel.selectedIndex=0;
+    }
     syncDosages();
   }
 
@@ -292,6 +297,7 @@
       validated.push({...entry,specimens});
     }
     const sampleOption=f.elements.sample.selectedOptions[0],now=new Date().toISOString();
+    if(sampleOption?.dataset?.sampleId)p.activeSampleId=sampleOption.dataset.sampleId;
     let draftReused=false;
     for(const entry of validated){
       const payload={sample,sampleId:sampleOption?.dataset?.sampleId||null,dosage:entry.dosage,
