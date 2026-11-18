@@ -110,6 +110,32 @@
     return next;
   }
 
+  // 保存後・端末間共有後も水洗い容器番号を保持。
+  function preserveGrainWashContainers(newer,older){
+    const next=clone(newer);
+    if(next?.type!=='grain'||older?.type!=='grain')return next;
+    if(String(next.sample||'').trim()&&String(older.sample||'').trim()
+      &&String(next.sample).trim()!==String(older.sample).trim())return next;
+    const first=(...vals)=>vals.find(x=>x!==null&&x!==undefined&&String(x).trim()!=='');
+    const kept={
+      retained2mm:first(next.draftFields?.washContainer2mmRetained,next.washContainers?.retained2mm,
+        next.washContainer2mmRetained,older.draftFields?.washContainer2mmRetained,
+        older.washContainers?.retained2mm,older.washContainer2mmRetained),
+      passing2mm:first(next.draftFields?.washContainer2mmPassing,next.washContainers?.passing2mm,
+        next.washContainer2mmPassing,older.draftFields?.washContainer2mmPassing,
+        older.washContainers?.passing2mm,older.washContainer2mmPassing)
+    };
+    if(kept.retained2mm===undefined&&kept.passing2mm===undefined)return next;
+    next.washContainers={...(next.washContainers||{})};
+    for(const [name,key] of [['retained2mm','washContainer2mmRetained'],['passing2mm','washContainer2mmPassing']]){
+      if(kept[name]===undefined)continue;
+      next.washContainers[name]=String(kept[name]);
+      next[key]=String(kept[name]);
+      if(next.draft)next.draftFields={...(next.draftFields||{}),[key]:String(kept[name])};
+    }
+    return next;
+  }
+
   // 同じ試験IDの沈降データだけを統合。新しい端末の空欄で読みを消さない。
   function preserveGrainReadings(newer,older){
     const next=clone(newer);
@@ -184,7 +210,7 @@
         if(!old){merged.set(key,clone(t));return;}
         const newer=testStamp(t)>=testStamp(old)?t:old;
         const older=newer===t?old:t;
-        merged.set(key,preserveUnconfined(preserveGrainReadings(preserveGrainMass(newer,older),older),older));
+        merged.set(key,preserveUnconfined(preserveGrainWashContainers(preserveGrainReadings(preserveGrainMass(newer,older),older),older),older));
       });
     };
     add(a.tests);add(b.tests);
