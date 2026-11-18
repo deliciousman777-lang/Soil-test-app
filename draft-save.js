@@ -183,6 +183,18 @@
         test.sedimentationInputFields.useSedimentation=true;
       }
     }
+    if(cfg.type==='grain'&&test){
+      // 水洗い容器番号は空欄の古いフォームで消さず、既存の保存値を引き継ぐ。
+      const wash=[
+        ['washContainer2mmRetained','retained2mm'],
+        ['washContainer2mmPassing','passing2mm']
+      ];
+      for(const [key,nested] of wash){
+        const last=[test.draftFields?.[key],test.washContainers?.[nested],test[key]]
+          .find(v=>v!==null&&v!==undefined&&String(v).trim()!=='');
+        if(String(fields[key]??'').trim()===''&&last!==undefined)fields[key]=String(last);
+      }
+    }
     const grainMassBackup=cfg.type==='grain'?protectGrainMassDraft(fields,test):null;
     const draftExtra=cfg.type==='unconfined-compression'?window.SoilNoteUnconfinedDraft?.snapshot?.():null;
 
@@ -228,6 +240,8 @@
       const controls=form.elements[name];if(!controls)return;
       const list=(typeof controls.length==='number'&&!controls.tagName)?[...controls]:[controls];
       list.forEach(el=>{
+        if(cfg.type==='grain'&&/^washContainer2mm(Retained|Passing)$/.test(name)
+          &&String(value??'').trim()===''&&String(el.value??'').trim()!=='')return;
         if(el.type==='checkbox')el.checked=Boolean(value);
         else if(el.type==='radio')el.checked=String(el.value)===String(value);
         else el.value=value??'';
