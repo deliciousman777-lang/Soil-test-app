@@ -53,9 +53,10 @@
       }
     }
     const avg=key=>densityMeasurements.length?densityMeasurements.reduce((s,r)=>s+r[key],0)/densityMeasurements.length:null;
-    const wetDensity=avg('wetDensity');
+    const rawWetDensity=avg('wetDensity');
+    const wetDensity=rawWetDensity!==null?Number(rawWetDensity.toFixed(3)):null;
     const batchSoilMass=number(value(form,'batchSoilMass'));
-    const batchVolume=wetDensity!==null&&wetDensity>0&&batchSoilMass!==null?batchSoilMass/wetDensity:null;
+    const batchVolume=wetDensity!==null&&wetDensity>0&&batchSoilMass!==null&&batchSoilMass>0?Number((batchSoilMass/wetDensity).toFixed(1)):null;
     const additions=[1,2,3].map(i=>{
       const dosage=number(value(form,`dosage${i}`));
       return {dosage,cementMass:dosage!==null&&batchVolume!==null?(dosage/1000)*batchVolume:null};
