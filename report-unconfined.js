@@ -12,12 +12,47 @@
     catch{return null;}
   }
 
+  const sampleKey=value=>String(value??'').trim().toLocaleLowerCase('ja-JP');
+
+  // 同じ試料を表記の微差ではなく試料IDでも照合し、No.20等の取りこぼしを防ぐ。
+  function matchingTests(p,sample){
+    const target=(p?.samples||[]).find(s=>sampleKey(s.name)===sampleKey(sample));
+    return (p?.tests||[]).filter(t=>t.type===TYPE&&(
+      (target?.id&&t.sampleId&&String(t.sampleId)===String(target.id))||
+      sampleKey(t.sample)===sampleKey(sample)
+    ));
+  }
+
+  // 途中保存は正式値と混同しないよう印付きで表示し、入力済みの水準だけ反映する。
+  function draftLevels(t){
+    const extra=t.draftExtra||{},cache=extra.cache||{};
+    const entries=Object.entries(cache);
+    if(!entries.length&&t.draftFields){
+      entries.push([String(extra.active||t.draftFields.dosage||t.dosage||''),{fields:t.draftFields,sketches:extra.sketches||[]}]);
+    }
+    return entries.filter(([dose,snap])=>finite(dose)&&snap?.fields).map(([dose,snap])=>{
+      const fields=snap.fields,sketches=snap.sketches||[];
+      const specimens=[1,2,3].map(i=>{
+        const moisture={containerNo:String(fields['containerNo'+i]||'')};
+        ['ma','mb','mc'].forEach(k=>{const v=fields[k+i];moisture[k]=finite(v)?Number(v):null;});
+        const specimen={moisture,sketch:Array.isArray(sketches[i-1])?sketches[i-1]:[]};
+        ['mass','diameter','height','maxStrength'].forEach(k=>{const v=fields[k+i];specimen[k]=finite(v)?Number(v):null;});
+        specimen.state=String(fields['state'+i]||'');
+        specimen.note=String(fields['note'+i]||'');
+        return specimen;
+      });
+      return {...t,dosage:Number(dose),improvementDate:fields.improvementDate||'',compressionDate:fields.compressionDate||'',specimens,draft:true};
+    });
+  }
+
   function testRows(p,sample){
-    const rows=[...(p?.tests||[])].filter(t=>t.type===TYPE&&String(t.sample||'')===String(sample||''));
+    const rows=matchingTests(p,sample).flatMap(t=>t.draft?draftLevels(t):[t]);
     const byDosage=new Map();
-    rows.sort((a,b)=>String(b.updatedAt||b.createdAt||'').localeCompare(String(a.updatedAt||a.createdAt||''))).forEach(t=>{
-      const key=finite(t.dosage)?String(Number(t.dosage)):`manual:${t.id||t.createdAt||Math.random()}`;
-      if(!byDosage.has(key))byDosage.set(key,t);
+    rows.sort((a,b)=>String(b.updatedAt||b.draftSavedAt||b.createdAt||'').localeCompare(String(a.updatedAt||a.draftSavedAt||a.createdAt||''))).forEach(t=>{
+      const key=finite(t.dosage)?String(Number(t.dosage)):`manual:${t.id||t.createdAt||''}`;
+      // 同時刻なら完成保存を優先。新しい途中保存があれば最新の値を明示する。
+      if(!byDosage.has(key)||byDosage.get(key).draft&&!t.draft&&
+        String(byDosage.get(key).updatedAt||'')===String(t.updatedAt||''))byDosage.set(key,t);
     });
     return [...byDosage.values()].sort((a,b)=>{
       const av=finite(a.dosage)?Number(a.dosage):Number.POSITIVE_INFINITY;
@@ -52,7 +87,7 @@
     return `<div class="ucs-block">
       <div class="ucs-left">
         <table class="ucs-table" aria-label="一軸圧縮試験 配合${index+1}">
-          <tr><th>試　料　名</th><td colspan="3" class="ucs-sample">${displaySample(test,fallbackSample)}</td></tr>
+          <tr><th>試　料　名</th><td colspan="3" class="ucs-sample">${displaySample(test,fallbackSample)}${t.draft?' <small>（途中保存）</small>':''}</td></tr>
           <tr><th>試　験　日</th><td class="ucs-date-label">改良日</td><td>${esc(date(t.improvementDate))}</td><td class="ucs-date-cell"><span>圧縮日</span><b>${esc(date(t.compressionDate))}</b></td></tr>
           <tr><th>供 試 体 番 号</th>${ss.map((_,i)=>`<td>${i+1}</td>`).join('')}</tr>
           <tr><th>供 試 体 状 態</th>${ss.map(s=>`<td>${esc(s.state||'')}</td>`).join('')}</tr>
@@ -126,8 +161,8 @@
     if(!root||!p||!sel||!root.querySelector('.report-page'))return;
     const existing=root.querySelector('#reportUnconfinedPage');
     const arr=testRows(p,sel.value||'');
-    if(arr.length&&!existing)root.insertAdjacentHTML('beforeend',page(p,sel.value||'',arr));
-    if(!arr.length&&existing)existing.remove();
+    if(existing)existing.remove();
+    if(arr.length)root.insertAdjacentHTML('beforeend',page(p,sel.value||'',arr));
     renumber(root);
   }
 
@@ -136,18 +171,20 @@
     if(!root){setTimeout(setup,50);return;}
     new MutationObserver(()=>requestAnimationFrame(()=>enhance(root))).observe(root,{childList:true,subtree:false});
     document.getElementById('reportSampleSelect')?.addEventListener('change',()=>requestAnimationFrame(()=>enhance(root)));
-    document.addEventListener('click',e=>{
-      if(!e.target.closest?.('#reportPrintBtn'))return;
-      enhance(root);
-      setTimeout(()=>{
-        const pr=document.getElementById('soilnotePrintRoot');
-        if(!pr)return;
+    // printReport() は印刷を即時開始するため、非同期 setTimeout では反映が間に合わない。
+    // 既存の印刷処理を包み、印刷が始まる前に一軸ページを確定させる。
+    const previousPrint=window.print;
+    window.print=function(...args){
+      const pr=document.getElementById('soilnotePrintRoot');
+      const p=project(),sel=document.getElementById('reportSampleSelect');
+      if(pr&&p&&sel){
         pr.querySelector('#reportUnconfinedPage')?.remove();
-        const p=project(),sel=document.getElementById('reportSampleSelect'),arr=testRows(p,sel?.value||'');
-        if(arr.length)pr.insertAdjacentHTML('beforeend',page(p,sel?.value||'',arr));
+        const arr=testRows(p,sel.value||'');
+        if(arr.length)pr.insertAdjacentHTML('beforeend',page(p,sel.value||'',arr));
         renumber(pr);
-      },0);
-    },true);
+      }
+      return previousPrint.apply(this,args);
+    };
     requestAnimationFrame(()=>enhance(root));
   }
 
