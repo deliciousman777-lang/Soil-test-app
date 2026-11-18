@@ -41,7 +41,7 @@
     const rho=finite(test.wetDensity)?Number(test.wetDensity):(()=>{const a=dens.map(r=>r.wetDensity).filter(finite).map(Number);return a.length?a.reduce((x,y)=>x+y,0)/a.length:null;})();
     const wn=finite(test.naturalWaterContent)?Number(test.naturalWaterContent):null;
     const dry=rho!==null&&wn!==null?rho/(1+wn/100):null;
-    const batchVolume=finite(test.batchVolume)?Number(test.batchVolume):(finite(test.batchSoilMass)&&rho?Number(test.batchSoilMass)/rho:null);
+    const batchVolume=finite(test.batchVolume)?Number(test.batchVolume):(finite(test.batchSoilMass)&&rho?Number((Number(test.batchSoilMass)/Number(rho.toFixed(3))).toFixed(1)):null);
     const additions=(Array.isArray(test.additions)?test.additions:[]).slice(0,3);while(additions.length<3)additions.push({});
     const prep=test.preparationMethodLabel||PREP[test.preparationMethod]||test.preparationMethod||'';
     const curing=test.curing||{};
