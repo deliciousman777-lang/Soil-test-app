@@ -257,9 +257,9 @@
         test.moldMass = average.moldMass;
         test.moldSoilMass = average.moldSoilMass;
         test.soilMass = average.soilMass;
-        test.wetDensity = average.wetDensity;
-        if (Number.isFinite(Number(test.batchSoilMass)) && average.wetDensity > 0) {
-          test.batchVolume = Number(test.batchSoilMass) / average.wetDensity;
+        test.wetDensity = Number(average.wetDensity.toFixed(3));
+        if (Number.isFinite(Number(test.batchSoilMass)) && Number(test.batchSoilMass) > 0 && test.wetDensity > 0) {
+          test.batchVolume = Number((Number(test.batchSoilMass) / test.wetDensity).toFixed(1));
           if (Array.isArray(test.additions)) {
             test.additions = test.additions.map(row=>({
               ...row,
