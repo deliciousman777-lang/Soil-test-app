@@ -50,6 +50,94 @@
     return `legacy:${String(t?.type||'')}:${String(t?.sample||'')}:${String(t?.createdAt||'')}:${index}`;
   }
 
+  // 保存後・端末間共有後も水洗い容器番号を保持。
+  function preserveGrainWashContainers(newer,older){
+    const next=clone(newer);
+    if(next?.type!=='grain'||older?.type!=='grain')return next;
+    if(String(next.sample||'').trim()&&String(older.sample||'').trim()
+      &&String(next.sample).trim()!==String(older.sample).trim())return next;
+    const first=(...vals)=>vals.find(x=>x!==null&&x!==undefined&&String(x).trim()!=='');
+    const kept={
+      retained2mm:first(next.draftFields?.washContainer2mmRetained,next.washContainers?.retained2mm,
+        next.washContainer2mmRetained,older.draftFields?.washContainer2mmRetained,
+        older.washContainers?.retained2mm,older.washContainer2mmRetained),
+      passing2mm:first(next.draftFields?.washContainer2mmPassing,next.washContainers?.passing2mm,
+        next.washContainer2mmPassing,older.draftFields?.washContainer2mmPassing,
+        older.washContainers?.passing2mm,older.washContainer2mmPassing)
+    };
+    if(kept.retained2mm===undefined&&kept.passing2mm===undefined)return next;
+    next.washContainers={...(next.washContainers||{})};
+    for(const [name,key] of [['retained2mm','washContainer2mmRetained'],['passing2mm','washContainer2mmPassing']]){
+      if(kept[name]===undefined)continue;
+      next.washContainers[name]=String(kept[name]);
+      next[key]=String(kept[name]);
+      if(next.draft)next.draftFields={...(next.draftFields||{}),[key]:String(kept[name])};
+    }
+    return next;
+  }
+
+  // 同じ試験IDの沈降データだけを統合。新しい端末の空欄で読みを消さない。
+  function preserveGrainReadings(newer,older){
+    const next=clone(newer);
+    if(next?.type!=='grain'||older?.type!=='grain')return next;
+    const sampleA=String(next.sample||'').trim(),sampleB=String(older.sample||'').trim();
+    if(sampleA&&sampleB&&sampleA!==sampleB)return next;
+    const container=t=>String(t.draftFields?.sedSampleContainerNo||t.sedimentationInputFields?.sedSampleContainerNo||t.sedimentation?.settings?.sampleContainerNo||'').trim();
+    if(container(next)&&container(older)&&container(next)!==container(older))return next;
+    const present=v=>v!==null&&v!==undefined&&String(v).trim()!=='';
+    const read=(t,i)=>{
+      const name='sed_r_'+i;
+      const fields=[t.draftFields,t.sedimentationInputFields,t.sedimentationPendingFields];
+      for(const f of fields)if(present(f?.[name]))return String(f[name]);
+      const row=t.sedimentation?.rows?.[i];
+      return row&&present(row.r)?String(row.r):'';
+    };
+    const restored={};
+    for(let i=0;i<8;i++){
+      const current=read(next,i),prior=read(older,i);
+      if(present(current)||present(prior))restored['sed_r_'+i]=present(current)?current:prior;
+    }
+    if(!Object.keys(restored).length)return next;
+    next.sedimentationInputFields={...(older.sedimentationInputFields||{}),...(next.sedimentationInputFields||{}),...restored,useSedimentation:true};
+    if(next.draft)next.draftFields={...(next.draftFields||{}),...restored,useSedimentation:true};
+    if(next.sedimentationPendingFields)next.sedimentationPendingFields={...next.sedimentationPendingFields,...restored};
+    if(!next.sedimentation?.valid&&older.sedimentation?.valid&&older.sedimentation.rows?.length===8){
+      next.sedimentation=clone(older.sedimentation);
+    }
+    if(!next.sedimentationAutoSavedAt&&older.sedimentationAutoSavedAt){
+      next.sedimentationAutoSavedAt=older.sedimentationAutoSavedAt;
+    }
+    return next;
+  }
+
+  function mergeSedimentationRuns(a,b){
+    const runs=new Map();
+    const add=list=>(Array.isArray(list)?list:[]).forEach(run=>{
+      if(!run?.id)return;
+      const id=String(run.id),prior=runs.get(id);
+      if(!prior){runs.set(id,clone(run));return;}
+      const newer=timeOf(run.updatedAt||run.createdAt)>=timeOf(prior.updatedAt||prior.createdAt)?run:prior;
+      const older=newer===run?prior:run;
+      const next=clone(newer);
+      if(String(next.projectId||'')===String(older.projectId||'')){
+        next.fields={...(older.fields||{}),...(next.fields||{})};
+        for(let i=0;i<8;i++){
+          const k='sed_r_'+i;
+          if((next.fields[k]===null||next.fields[k]===undefined||String(next.fields[k]).trim()==='')
+             &&older.fields?.[k]!==null&&older.fields?.[k]!==undefined&&String(older.fields[k]).trim()!==''){
+            next.fields[k]=older.fields[k];
+          }
+        }
+        if(newer.status==='finished'||older.status==='finished'){
+          next.status='finished';
+        }
+      }
+      runs.set(id,next);
+    });
+    add(a);add(b);
+    return [...runs.values()].sort((x,y)=>String(x.id).localeCompare(String(y.id)));
+  }
+
   function mergeProjects(a,b){
     if(!a)return clone(b);
     if(!b)return clone(a);
@@ -59,7 +147,10 @@
       (Array.isArray(list)?list:[]).forEach((t,i)=>{
         const key=testKey(t,i);
         const old=merged.get(key);
-        if(!old || testStamp(t) >= testStamp(old)) merged.set(key,clone(t));
+        if(!old){merged.set(key,clone(t));return;}
+        const newer=testStamp(t)>=testStamp(old)?t:old;
+        const older=newer===t?old:t;
+        merged.set(key,preserveGrainWashContainers(preserveGrainReadings(newer,older),older));
       });
     };
     add(a.tests);add(b.tests);
@@ -70,30 +161,12 @@
     const before=JSON.stringify(Array.isArray(base.tests)?base.tests:[]);
     base.tests=tests;
 
-    // Sedimentation workbench runs are part of the shared project, rather
-    // than local-only state. Merge by stable run ID and update timestamp so
-    // concurrent readings from different devices do not discard other runs.
-    const runs=new Map();
-    const mergeRunList=list=>{
-      (Array.isArray(list)?list:[]).forEach(run=>{
-        if(!run?.id)return;
-        const key=String(run.id);
-        const old=runs.get(key);
-        const incoming=timeOf(run.updatedAt||run.createdAt);
-        const previous=timeOf(old?.updatedAt||old?.createdAt);
-        if(!old||incoming>previous
-          ||(incoming===previous&&run.status==='finished'&&old.status!=='finished')){
-          runs.set(key,clone(run));
-        }
-      });
-    };
-    mergeRunList(a.sedimentationRuns);
-    mergeRunList(b.sedimentationRuns);
-    const sedimentationRuns=[...runs.values()].sort((x,y)=>String(x.id).localeCompare(String(y.id)));
-    const beforeRuns=JSON.stringify(Array.isArray(base.sedimentationRuns)?base.sedimentationRuns:[]);
-    if(sedimentationRuns.length||beforeRuns!=='[]')base.sedimentationRuns=sedimentationRuns;
+    const originalRuns=JSON.stringify(Array.isArray(base.sedimentationRuns)?base.sedimentationRuns:[]);
+    const sedimentationRuns=mergeSedimentationRuns(a.sedimentationRuns,b.sedimentationRuns);
+    if(sedimentationRuns.length||originalRuns!=='[]')base.sedimentationRuns=sedimentationRuns;
+
     if(JSON.stringify(tests)!==before
-      ||JSON.stringify(sedimentationRuns)!==beforeRuns){
+      ||JSON.stringify(sedimentationRuns)!==originalRuns){
       base.updatedAt=new Date().toISOString();
     }
     return base;

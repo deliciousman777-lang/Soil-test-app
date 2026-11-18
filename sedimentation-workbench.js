@@ -17,6 +17,16 @@
       return Array.isArray(x)?x:[];
     }catch{return [];}
   }
+  // 保存先や別端末の空欄スナップショットから測定済みの読みを守る。
+  function keepReadings(newer,older){
+    const fields={...(older||{}),...(newer||{})};
+    for(let i=0;i<TIMES.length;i++){
+      const k='sed_r_'+i;
+      if(String(fields[k]??'').trim()===''&&String(older?.[k]??'').trim()!=='')fields[k]=older[k];
+    }
+    if(older?.useSedimentation)fields.useSedimentation=true;
+    return fields;
+  }
   function runStamp(run){
     const n=new Date(run?.updatedAt||run?.createdAt||0).getTime();
     return Number.isFinite(n)?n:0;
@@ -28,10 +38,12 @@
       const key=String(run.id);
       const old=map.get(key);
       const incoming=runStamp(run),previous=runStamp(old);
-      if(!old||incoming>previous
-        ||(incoming===previous&&run.status==='finished'&&old.status!=='finished')){
-        map.set(key,run);
-      }
+      if(!old){map.set(key,run);return;}
+      const useIncoming=incoming>previous
+        ||(incoming===previous&&run.status==='finished'&&old.status!=='finished');
+      const newer=useIncoming?run:old,older=useIncoming?old:run;
+      map.set(key,{...newer,fields:keepReadings(newer.fields,older.fields)});
+
     }));
     return [...map.values()].sort((a,b)=>String(a.id).localeCompare(String(b.id)));
   }
@@ -178,7 +190,20 @@
     form.dataset.sedRunId=run.id;
     run.projectName=p.name||run.projectName||'';
     run.constructionCardNo=p.constructionCardNo||run.constructionCardNo||'';
-    run.fields=serializeForm();
+    const incomingFields=serializeForm();
+    const priorSample=String(run.fields?.sample||run.sample||'').trim();
+    const priorContainer=String(run.fields?.[SAMPLE_CONTAINER]||run.sampleContainerNo||'').trim();
+    // 別試料へ切り替えた場合は以前の読みを混ぜない。
+    const sameSample=(!priorSample||!sample||priorSample===sample)
+      &&(!priorContainer||!container||priorContainer===container);
+    run.fields=sameSample?keepReadings(incomingFields,run.fields):incomingFields;
+    // 復元値を入力画面にも反映しないと、次回の保存で空欄に戻る。
+    if(sameSample){
+      for(let i=0;i<TIMES.length;i++){
+        const input=form.elements['sed_r_'+i],value=run.fields['sed_r_'+i];
+        if(input&&String(input.value??'').trim()===''&&String(value??'').trim()!=='')input.value=value;
+      }
+    }
     run.sample=String(run.fields.sample||'').trim();
     run.sampleContainerNo=String(run.fields[SAMPLE_CONTAINER]||'').trim();
     run.cylinderNo=String(run.fields.cylinderNo||'').trim();
@@ -538,10 +563,7 @@
     document.getElementById('sedWorkbenchDialog')?.close();
     try{openProject(p.id);}catch{}
     // Restore the original grain test edit ID, otherwise submitting creates a second grain test.
-    const sample=String(run.fields?.sample||run.sample||'').trim();
-    const candidates=(p.tests||[]).filter(t=>t.type==='grain'&&String(t.sample||'').trim()===sample);
-    const existing=(p.tests||[]).find(t=>t.type==='grain'&&t.id===run.grainTestId)
-      ||(candidates.length===1?candidates[0]:null);
+    const existing=matchingGrainTest(run,p);
     if(existing){
       const runs=loadRuns();const linked=runById(runId,runs);
       if(linked&&linked.grainTestId!==existing.id){linked.grainTestId=existing.id;saveRuns(runs);}
@@ -817,6 +839,76 @@
     e.preventDefault();directSave(input.dataset.sedDirectInput,Number(input.dataset.index),input.value);
   });
 
+  // 消えた表示値を、同じ試料IDの「沈降進行中」ローカル/共有バックアップから救出する。
+  function recoverSavedReadings(){
+    const projects=Array.isArray(state?.data?.projects)?state.data.projects:[];
+    const runs=loadRuns();
+    let recovered=0;
+    let changedAny=false;
+    projects.forEach(project=>{
+      const grainTests=(project.tests||[]).filter(t=>t.type==='grain');
+      grainTests.forEach(test=>{
+        const container=String(test.draftFields?.[SAMPLE_CONTAINER]
+          ||test.sedimentationInputFields?.[SAMPLE_CONTAINER]
+          ||test.sedimentation?.settings?.sampleContainerNo||'').trim();
+        const sample=String(test.sample||'').trim();
+        const candidates=runs.filter(run=>{
+          if(String(run.projectId)!==String(project.id))return false;
+          if(run.grainTestId)return String(run.grainTestId)===String(test.id);
+          const rSample=String(run.fields?.sample||run.sample||'').trim();
+          const rContainer=String(run.fields?.[SAMPLE_CONTAINER]||run.sampleContainerNo||'').trim();
+          // ID不明の場合は試料名と容器No.が両方一致し、候補が一意のときだけ。
+          return Boolean(sample&&container&&rSample===sample&&rContainer===container
+            &&grainTests.filter(x=>String(x.sample||'').trim()===sample).length===1);
+        }).sort((a,b)=>runStamp(b)-runStamp(a));
+        const previous={...(test.sedimentationInputFields||{})};
+        let sourceCount=0,changed=false;
+        for(let i=0;i<TIMES.length;i++){
+          const k='sed_r_'+i;
+          const old=[
+            test.sedimentationInputFields?.[k],
+            test.draftFields?.[k],
+            test.sedimentationPendingFields?.[k],
+            test.sedimentation?.rows?.[i]?.r
+          ].find(v=>v!==undefined&&v!==null&&String(v).trim()!=='');
+          const backup=candidates.map(r=>r.fields?.[k])
+            .find(v=>v!==undefined&&v!==null&&String(v).trim()!=='');
+          const value=old??backup;
+          if(value===undefined)continue;
+          if(String(previous[k]??'').trim()===''){
+            previous[k]=String(value);changed=true;
+            if(old===undefined&&backup!==undefined)sourceCount++;
+          }
+        }
+        if(!changed)return;
+        const best=candidates[0]?.fields||{};
+        for(const [key,value] of Object.entries(best)){
+          if(key==='sample'||value===undefined||value===null)continue;
+          if((previous[key]===undefined||String(previous[key]).trim()==='')&&String(value).trim()!=='')previous[key]=value;
+        }
+        previous.sample=sample;
+        previous.useSedimentation=true;
+        test.sedimentationInputFields=previous;
+        if(test.draft)test.draftFields=keepReadings(test.draftFields,previous);
+        if(!test.sedimentation?.valid){
+          const payload=readingsComplete(previous)?sedimentationFromSnapshot(previous):null;
+          if(payload?.valid){
+            payload.settings.sampleContainerNo=String(previous[SAMPLE_CONTAINER]||container);
+            test.sedimentation=payload;
+            delete test.sedimentationPendingFields;
+          }else{
+            test.sedimentationPendingFields=keepReadings(test.sedimentationPendingFields,previous);
+          }
+        }
+        test.updatedAt=new Date().toISOString();
+        project.updatedAt=test.updatedAt;
+        changedAny=true;
+        recovered+=sourceCount;
+      });
+    });
+    return {recovered,changedAny};
+  }
+
   function init(){
     injectSampleContainer();injectStartControl();injectWorkbench();patchEditAndCards();installFinalSaveHook();
     const form=document.getElementById('grainForm');
@@ -830,6 +922,15 @@
     });
     // "Add grain" must open a blank test, not silently restore another run.
     document.getElementById('addGrainBtn')?.addEventListener('click',()=>setTimeout(()=>{injectSampleContainer();injectStartControl();},0));
+    // 既存の途中記録・完了記録も読み直して、保存済みの粒度試験へ安全に救出。
+    try{
+      const recovery=recoverSavedReadings();
+      if(recovery.changedAny){
+        saveData();
+        try{renderTests();}catch{}
+        if(recovery.recovered>0)showAutoSaveNotice(`✓ 沈降の読み ${recovery.recovered}件をバックアップから復元しました`);
+      }
+    }catch(error){console.warn('沈降読みの復旧確認に失敗しました',error);}
     // Recover 8/8 workbench snapshots that were recorded before this update.
     setTimeout(()=>{
       loadRuns().filter(run=>run.status!=='finished'&&run.status!=='deleted'&&readingsComplete(run.fields)

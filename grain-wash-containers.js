@@ -57,22 +57,30 @@
     };
   }
 
-  function applyToTest(test,values){
-    if(!test)return;
-    test.washContainers={
-      retained2mm:values.retained,
-      passing2mm:values.passing
+  function readFromTest(test){
+    // 完成保存・途中保存のどちらで入力しても値を見つけられるようにする。
+    const first=values=>values.find(value=>value!==null&&value!==undefined&&String(value).trim()!=='');
+    return {
+      retained:String(first([test?.washContainers?.retained2mm,test?.[RETAINED],test?.draftFields?.[RETAINED]])??''),
+      passing:String(first([test?.washContainers?.passing2mm,test?.[PASSING],test?.draftFields?.[PASSING]])??'')
     };
-    // 後方互換・検索しやすさのためトップレベルにも保持
-    test[RETAINED]=values.retained;
-    test[PASSING]=values.passing;
   }
 
-  function readFromTest(test){
-    return {
-      retained:String(test?.washContainers?.retained2mm??test?.[RETAINED]??''),
-      passing:String(test?.washContainers?.passing2mm??test?.[PASSING]??'')
+  function applyToTest(test,values){
+    if(!test)return;
+    const previous=readFromTest(test);
+    // 空欄のフォームや古い端末からの更新で、既存の容器番号を消さない。
+    const next={
+      retained:values.retained||previous.retained,
+      passing:values.passing||previous.passing
     };
+    test.washContainers={retained2mm:next.retained,passing2mm:next.passing};
+    test[RETAINED]=next.retained;
+    test[PASSING]=next.passing;
+    if(test.draftFields){
+      if(next.retained)test.draftFields[RETAINED]=next.retained;
+      if(next.passing)test.draftFields[PASSING]=next.passing;
+    }
   }
 
   // 完成保存時：既存保存処理を邪魔せず、成功後に容器No.を追記する。
@@ -82,7 +90,8 @@
     const form=e.target;
     pendingSubmit={
       values:valuesFromForm(form),
-      editId:state?.editingTestId||'',
+      projectId:p.id,
+      editId:state?.editingTestId||form.dataset.draftTestId||'',
       sample:String(form.elements.sample?.value??'').trim(),
       beforeIds:new Set((p.tests||[]).map(t=>t.id))
     };
@@ -92,16 +101,13 @@
       const dialog=document.getElementById('grainDialog');
       // 入力不備で保存できなかった場合はダイアログが開いたままなので何もしない。
       if(dialog?.open)return;
-      const pp=project();if(!pp)return;
+      const pp=project();if(!pp||pp.id!==pending.projectId)return;
       let test=pending.editId?pp.tests.find(t=>t.id===pending.editId&&t.type==='grain'):null;
       if(!test){
         const added=(pp.tests||[]).filter(t=>t.type==='grain'&&!pending.beforeIds.has(t.id));
         test=added.sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')))[0]||null;
       }
-      if(!test&&pending.sample){
-        test=[...(pp.tests||[])].filter(t=>t.type==='grain'&&!t.draft&&String(t.sample||'')===pending.sample)
-          .sort((a,b)=>String(b.updatedAt||b.createdAt||'').localeCompare(String(a.updatedAt||a.createdAt||'')))[0]||null;
-      }
+      // 同じ試料名の別試験に誤書き込みしないため、ID未特定なら保存中止。
       if(!test)return;
       applyToTest(test,pending.values);
       saveData();
@@ -117,8 +123,7 @@
       injectFields();
       const form=document.getElementById('grainForm');
       const t=grainById(testId);if(!form||!t)return;
-      // 途中保存は draft-save.js が直後に draftFields を復元するので、ここでは完成データだけ設定。
-      if(t.draft)return;
+      // 途中保存でも補助フィールドが失われた場合は確定済みの値で復元。
       const v=readFromTest(t);
       if(form.elements[RETAINED])form.elements[RETAINED].value=v.retained;
       if(form.elements[PASSING])form.elements[PASSING].value=v.passing;

@@ -215,8 +215,17 @@ function readMeasurement(index) {
 }
 
 function getAllMeasurements() {
-  const measurements = [1,2,3].map(readMeasurement);
-  return measurements.every(Boolean) ? measurements : null;
+  const measurements = [];
+  for(const index of [1,2,3]){
+    const names=[`containerNo${index}`,`containerMass${index}`,`wetMass${index}`,`dryMass${index}`];
+    const started=names.some(name=>String(moistureForm.elements[name]?.value??'').trim()!=='');
+    if(!started)continue;
+    const row=readMeasurement(index);
+    // 入力しかけの測定を無視すると誤った平均になるため、その場合は保存しない。
+    if(!row)return null;
+    measurements.push(row);
+  }
+  return measurements.length?measurements:null;
 }
 
 function updateMoisturePreview() {
@@ -233,9 +242,9 @@ function updateMoisturePreview() {
   });
 
   const preview = document.getElementById('moisturePreview');
-  if (values.length === 3) {
-    const average = values.reduce((a,b) => a + b, 0) / 3;
-    preview.textContent = `平均含水比：${average.toFixed(1)} %`;
+  if (values.length) {
+    const average = values.reduce((a,b) => a + b, 0) / values.length;
+    preview.textContent = `${values.length===1?'含水比':'平均含水比'}：${average.toFixed(1)} %（${values.length}測定）`;
   } else {
     preview.textContent = '平均含水比：—';
   }
@@ -519,7 +528,7 @@ moistureForm.addEventListener('submit', e => {
   e.preventDefault();
   const measurements = getAllMeasurements();
   if (!measurements) {
-    alert('3測定すべての質量を確認してください。各測定で「湿潤質量 ≥ 乾燥質量 > 容器質量」になるよう入力してください。');
+    alert('含水比は1〜3測定で保存できます。入力した測定は、すべて「湿潤質量 ≥ 乾燥質量 > 容器質量」を確認してください。');
     return;
   }
 
