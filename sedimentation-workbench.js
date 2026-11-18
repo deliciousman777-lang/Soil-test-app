@@ -563,10 +563,7 @@
     document.getElementById('sedWorkbenchDialog')?.close();
     try{openProject(p.id);}catch{}
     // Restore the original grain test edit ID, otherwise submitting creates a second grain test.
-    const sample=String(run.fields?.sample||run.sample||'').trim();
-    const candidates=(p.tests||[]).filter(t=>t.type==='grain'&&String(t.sample||'').trim()===sample);
-    const existing=(p.tests||[]).find(t=>t.type==='grain'&&t.id===run.grainTestId)
-      ||(candidates.length===1?candidates[0]:null);
+    const existing=matchingGrainTest(run,p);
     if(existing){
       const runs=loadRuns();const linked=runById(runId,runs);
       if(linked&&linked.grainTestId!==existing.id){linked.grainTestId=existing.id;saveRuns(runs);}
@@ -847,6 +844,7 @@
     const projects=Array.isArray(state?.data?.projects)?state.data.projects:[];
     const runs=loadRuns();
     let recovered=0;
+    let changedAny=false;
     projects.forEach(project=>{
       const grainTests=(project.tests||[]).filter(t=>t.type==='grain');
       grainTests.forEach(test=>{
@@ -904,10 +902,11 @@
         }
         test.updatedAt=new Date().toISOString();
         project.updatedAt=test.updatedAt;
+        changedAny=true;
         recovered+=sourceCount;
       });
     });
-    return recovered;
+    return {recovered,changedAny};
   }
 
   function init(){
@@ -925,11 +924,11 @@
     document.getElementById('addGrainBtn')?.addEventListener('click',()=>setTimeout(()=>{injectSampleContainer();injectStartControl();},0));
     // 既存の途中記録・完了記録も読み直して、保存済みの粒度試験へ安全に救出。
     try{
-      const count=recoverSavedReadings();
-      if(count>0){
+      const recovery=recoverSavedReadings();
+      if(recovery.changedAny){
         saveData();
         try{renderTests();}catch{}
-        showAutoSaveNotice(`✓ 沈降の読み ${count}件をバックアップから復元しました`);
+        if(recovery.recovered>0)showAutoSaveNotice(`✓ 沈降の読み ${recovery.recovered}件をバックアップから復元しました`);
       }
     }catch(error){console.warn('沈降読みの復旧確認に失敗しました',error);}
     // Recover 8/8 workbench snapshots that were recorded before this update.
