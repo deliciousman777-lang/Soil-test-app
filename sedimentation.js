@@ -311,6 +311,18 @@ openEditGrain = function(testId) {
     const el = grainForm.elements[`sed_r_${i}`];
     if (el) el.value = row.r ?? '';
   });
+  // 完成データの計算行が欠落しても、保存した生の浮ひょう読みから復元。
+  const readingSources=[test.draftFields,test.sedimentationInputFields,test.sedimentationPendingFields];
+  let restored=false;
+  SED_TIMES_EXT.forEach((_,i)=>{
+    const el=grainForm.elements[`sed_r_${i}`];
+    if(!el||String(el.value??'').trim()!=='')return;
+    const key=`sed_r_${i}`;
+    const previous=readingSources.map(fields=>fields?.[key])
+      .find(v=>v!==null&&v!==undefined&&String(v).trim()!=='');
+    if(previous!==undefined){el.value=previous;restored=true;}
+  });
+  if(restored&&useSedimentationEl)useSedimentationEl.checked=true;
   updateSedimentationVisibility();
   syncTwoMmPassingRatio();
   updateSedimentationPreview();
