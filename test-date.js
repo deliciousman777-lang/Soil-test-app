@@ -5,7 +5,11 @@
     grainForm:{type:'grain',dialog:'grainDialog',addBtn:'addGrainBtn',editAttr:'data-edit-grain'},
     particleDensityForm:{type:'particleDensity',dialog:'particleDensityDialog',addBtn:'addParticleDensityBtn',editAttr:'data-edit-pd'},
     atterbergForm:{type:'atterberg',dialog:'atterbergDialog',addBtn:'addAtterbergBtn',editAttr:'data-edit-atterberg'},
-    coneIndexForm:{type:'cone-index',dialog:'coneIndexDialog',addBtn:'addConeIndexBtn',editAttr:'data-edit-cone-index'}
+    coneIndexForm:{type:'cone-index',dialog:'coneIndexDialog',addBtn:'addConeIndexBtn',editAttr:'data-edit-cone-index'},
+    compactionForm:{type:'compaction',dialog:'compactionDialog',addBtn:'addCompactionBtn',editAttr:'data-edit-compaction'},
+    // 配合・一軸には元々「圧縮日／試験日」欄があるので二重に入力欄を作らない。
+    mixDesignForm:{type:'mix-design',dialog:'mixDesignDialog',addBtn:'addMixDesignBtn',editAttr:'data-edit-mix-design',nativeDate:true},
+    unconfinedForm:{type:'unconfined-compression',dialog:'unconfinedDialog',addBtn:'addUnconfinedBtn',editAttr:'data-edit-unconfined',nativeDate:true}
   };
 
   const esc=v=>typeof escapeHtml==='function'?escapeHtml(v):String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
@@ -28,7 +32,7 @@
   function formIdForType(type){return Object.keys(CONFIGS).find(id=>CONFIGS[id].type===type)||'';}
 
   function injectDateField(form){
-    if(!form||form.elements?.testDate)return;
+    if(!form||cfgForForm(form)?.nativeDate||form.elements?.testDate)return;
     const sample=form.elements?.sample;
     if(!sample)return;
     const sampleLabel=sample.closest('label');
@@ -48,51 +52,79 @@
     Object.keys(CONFIGS).forEach(id=>injectDateField(document.getElementById(id)));
   }
 
+  function storedDate(test){
+    return test?.draftFields?.testDate || test?.testDate ||
+      test?.draftFields?.compressionDate || test?.compressionDate || '';
+  }
+
   function setNewDate(form){
     if(!form)return;
+    const cfg=cfgForForm(form);
     injectDateField(form);
-    if(form.elements.testDate)form.elements.testDate.value=today();
+    // 配合・一軸は元からある圧縮日欄と連動させ、既存の初期値は変えない。
+    if(!cfg?.nativeDate && form.elements.testDate)form.elements.testDate.value=today();
     form.dataset.testDateTargetId='';
   }
 
   function setEditDate(form,test){
     if(!form||!test)return;
+    const cfg=cfgForForm(form);
     injectDateField(form);
-    const draftDate=test.draftFields?.testDate;
-    if(form.elements.testDate)form.elements.testDate.value=draftDate??test.testDate??'';
+    if(!cfg?.nativeDate && form.elements.testDate)form.elements.testDate.value=storedDate(test);
     form.dataset.testDateTargetId=test.id;
   }
 
-  function attachDateAfterSave(form,cfg,beforeIds,editId,value){
+  // submit時に日付を控えておき、保存成功後の試験データに確実に書き込む。
+  // 入力フォームは保存直後にresetされるため、その後に読むと日付が消えてしまう。
+  function attachDateAfterSave(form,cfg,before,editId,submittedDate){
     const dialog=document.getElementById(cfg.dialog);
     setTimeout(()=>{
-      // バリデーションエラーならダイアログが開いたままなので何もしない
+      // 入力エラーで閉じていなければ保存していない。
       if(dialog?.open)return;
       const p=current();if(!p)return;
-      let test=editId?p.tests.find(t=>t.id===editId&&t.type===cfg.type):null;
-      if(!test){
-        const created=[...(p.tests||[])].reverse().find(t=>t.type===cfg.type&&!beforeIds.has(t.id));
-        if(created)test=created;
+      const tests=(p.tests||[]).filter(t=>t.type===cfg.type);
+      let saved=tests.filter(t=>{
+        const old=before.get(t.id);
+        return !old || old.updatedAt!==t.updatedAt ||
+          old.draftSavedAt!==t.draftSavedAt || old.draft!==Boolean(t.draft);
+      });
+      // 同じミリ秒内の訂正でupdatedAtが変わらない場合への対応。
+      if(!saved.length&&editId){
+        const edited=tests.find(t=>t.id===editId);
+        if(edited)saved=[edited];
       }
-      if(!test)return;
-      test.testDate=value||'';
-      if(test.draftFields)test.draftFields.testDate=value||'';
-      p.updatedAt=new Date().toISOString();
-      saveData();
-      renderTests();
+      if(!saved.length)return;
+      let changed=false;
+      for(const test of saved){
+        // 一軸は複数水準を一括保存するので水準ごとの圧縮日を優先する。
+        const value=cfg.nativeDate
+          ? (test.compressionDate||test.draftFields?.compressionDate||test.testDate||submittedDate||'')
+          : (submittedDate||test.draftFields?.testDate||test.testDate||'');
+        if(!value)continue; // 空欄が古い日付を消さないようにする
+        if(test.testDate!==value){test.testDate=value;changed=true;}
+        if(test.draft&&test.draftFields?.testDate!==value){
+          test.draftFields={...(test.draftFields||{}),testDate:value};
+          changed=true;
+        }
+      }
+      if(changed){
+        p.updatedAt=new Date().toISOString();
+        saveData();
+        renderTests();
+      }
     },0);
   }
 
-  function handleFinalSaveClick(button){
-    const form=button.closest('form');
+  function handleFinalSubmit(form){
     const cfg=cfgForForm(form);if(!cfg)return;
-    // 「途中保存」やキャンセルは対象外
-    if(button.type==='button')return;
     const p=current();if(!p)return;
-    const beforeIds=new Set((p.tests||[]).map(t=>t.id));
+    const before=new Map((p.tests||[]).filter(t=>t.type===cfg.type).map(t=>
+      [t.id,{updatedAt:t.updatedAt,draftSavedAt:t.draftSavedAt,draft:Boolean(t.draft)}]));
     const editId=state.editingTestId||form.dataset.testDateTargetId||'';
-    const value=form.elements.testDate?.value||'';
-    attachDateAfterSave(form,cfg,beforeIds,editId,value);
+    const value=cfg.nativeDate
+      ? (form.elements.compressionDate?.value||'')
+      : (form.elements.testDate?.value||'');
+    attachDateAfterSave(form,cfg,before,editId,value);
   }
 
   function enhanceCards(){
@@ -103,8 +135,8 @@
       if(!edit)return;
       const attr=[...edit.attributes].find(a=>a.name.startsWith('data-edit-'));
       const id=attr?.value;if(!id)return;
-      const test=p.tests?.find(t=>t.id===id);if(!test?.testDate&&!test?.draftFields?.testDate)return;
-      const value=test.draftFields?.testDate||test.testDate;
+      const test=p.tests?.find(t=>t.id===id);if(!storedDate(test))return;
+      const value=storedDate(test);
       const host=card.querySelector('.card-title-row > div')||card;
       const chip=document.createElement('span');chip.className='test-date-chip';chip.textContent=`試験日 ${displayDate(value)}`;
       host.appendChild(chip);
@@ -113,7 +145,7 @@
 
   function addDateToReview(id){
     const test=testById(id);if(!test)return;
-    const value=test.draftFields?.testDate||test.testDate;if(!value)return;
+    const value=storedDate(test);if(!value)return;
     setTimeout(()=>{
       const body=document.getElementById('testReviewBody');if(!body||body.querySelector('.review-test-date'))return;
       const box=document.createElement('div');box.className='review-test-date';box.textContent=`試験日：${displayDate(value)}`;
@@ -145,20 +177,11 @@
     const review=target.closest('[data-view-test],[data-view-any-test]');
     if(review){addDateToReview(review.dataset.viewTest||review.dataset.viewAnyTest);}
 
-    // 完成保存
-    handleFinalSaveClick(target);
+    // 保存はsubmitイベントで扱う（途中保存・入力エラーとの混同を防ぐ）。
   },true);
 
-  // Enterで保存する場合にも対応
-  document.addEventListener('keydown',e=>{
-    if(e.key!=='Enter')return;
-    const form=e.target?.closest?.('form');const cfg=cfgForForm(form);if(!cfg)return;
-    const p=current();if(!p)return;
-    const beforeIds=new Set((p.tests||[]).map(t=>t.id));
-    const editId=state.editingTestId||form.dataset.testDateTargetId||'';
-    const value=form.elements.testDate?.value||'';
-    attachDateAfterSave(form,cfg,beforeIds,editId,value);
-  },true);
+  // ボタン、Enterキー、iPhoneの完了操作のすべてをsubmitで捕捉する。
+  document.addEventListener('submit',e=>handleFinalSubmit(e.target),true);
 
   if(typeof renderTests==='function'){
     const base=renderTests;
