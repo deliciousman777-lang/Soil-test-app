@@ -17,6 +17,16 @@
       return Array.isArray(x)?x:[];
     }catch{return [];}
   }
+  // 保存先や別端末の空欄スナップショットから測定済みの読みを守る。
+  function keepReadings(newer,older){
+    const fields={...(older||{}),...(newer||{})};
+    for(let i=0;i<TIMES.length;i++){
+      const k='sed_r_'+i;
+      if(String(fields[k]??'').trim()===''&&String(older?.[k]??'').trim()!=='')fields[k]=older[k];
+    }
+    if(older?.useSedimentation)fields.useSedimentation=true;
+    return fields;
+  }
   function runStamp(run){
     const n=new Date(run?.updatedAt||run?.createdAt||0).getTime();
     return Number.isFinite(n)?n:0;
@@ -28,10 +38,12 @@
       const key=String(run.id);
       const old=map.get(key);
       const incoming=runStamp(run),previous=runStamp(old);
-      if(!old||incoming>previous
-        ||(incoming===previous&&run.status==='finished'&&old.status!=='finished')){
-        map.set(key,run);
-      }
+      if(!old){map.set(key,run);return;}
+      const useIncoming=incoming>previous
+        ||(incoming===previous&&run.status==='finished'&&old.status!=='finished');
+      const newer=useIncoming?run:old,older=useIncoming?old:run;
+      map.set(key,{...newer,fields:keepReadings(newer.fields,older.fields)});
+
     }));
     return [...map.values()].sort((a,b)=>String(a.id).localeCompare(String(b.id)));
   }
@@ -178,7 +190,20 @@
     form.dataset.sedRunId=run.id;
     run.projectName=p.name||run.projectName||'';
     run.constructionCardNo=p.constructionCardNo||run.constructionCardNo||'';
-    run.fields=serializeForm();
+    const incomingFields=serializeForm();
+    const priorSample=String(run.fields?.sample||run.sample||'').trim();
+    const priorContainer=String(run.fields?.[SAMPLE_CONTAINER]||run.sampleContainerNo||'').trim();
+    // 別試料へ切り替えた場合は以前の読みを混ぜない。
+    const sameSample=(!priorSample||!sample||priorSample===sample)
+      &&(!priorContainer||!container||priorContainer===container);
+    run.fields=sameSample?keepReadings(incomingFields,run.fields):incomingFields;
+    // 復元値を入力画面にも反映しないと、次回の保存で空欄に戻る。
+    if(sameSample){
+      for(let i=0;i<TIMES.length;i++){
+        const input=form.elements['sed_r_'+i],value=run.fields['sed_r_'+i];
+        if(input&&String(input.value??'').trim()===''&&String(value??'').trim()!=='')input.value=value;
+      }
+    }
     run.sample=String(run.fields.sample||'').trim();
     run.sampleContainerNo=String(run.fields[SAMPLE_CONTAINER]||'').trim();
     run.cylinderNo=String(run.fields.cylinderNo||'').trim();
