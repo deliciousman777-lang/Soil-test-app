@@ -148,6 +148,10 @@
     const {fields,labels}=serializeForm(form);
     const now=new Date().toISOString();
     const sample=String(fields.sample??'').trim();
+    if(cfg.type==='unconfined-compression'){
+      const sampleId=form.elements.sample?.selectedOptions?.[0]?.dataset?.sampleId;
+      if(sampleId)p.activeSampleId=sampleId;
+    }
     let test=state.editingTestId?testById(state.editingTestId):null;
     if(test&&test.type!==cfg.type)test=null;
     if(!test&&cfg.type==='grain'){
