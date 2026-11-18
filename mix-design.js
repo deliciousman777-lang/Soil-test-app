@@ -291,8 +291,14 @@
     const moldSoilMass = threePoint ? (complete ? mean('moldSoilMass') : null) : num(f.elements.moldSoilMass.value);
     const batchSoilMass = num(f.elements.batchSoilMass.value);
     const soilMass = moldMass !== null && moldSoilMass !== null ? moldSoilMass - moldMass : null;
-    const wetDensity = soilMass !== null && soilMass > 0 ? soilMass / moldVolume : null;
-    const batchVolume = wetDensity !== null && batchSoilMass !== null && batchSoilMass > 0 ? batchSoilMass / wetDensity : null;
+    // 表示に採用した湿潤密度（小数第3位）を以降の配合作製量計算にも用いる。
+    const wetDensity = soilMass !== null && soilMass > 0
+      ? Number((soilMass / moldVolume).toFixed(3))
+      : null;
+    // 配合作製体積は小数第1位に確定し、添加量・保存値とも同じ数値を使用する。
+    const batchVolume = wetDensity !== null && wetDensity > 0 && batchSoilMass !== null && batchSoilMass > 0
+      ? Number((batchSoilMass / wetDensity).toFixed(1))
+      : null;
 
     const additions = [1,2,3].map(i => {
       const dosage = num(f.elements[`dosage${i}`].value);
