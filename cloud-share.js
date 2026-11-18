@@ -110,6 +110,21 @@
     return next;
   }
 
+  // 共有端末の古いレコードが空欄の日付で上書きしても、入力済みの試験日を維持する。
+  function preserveTestDates(newer,older){
+    const next=clone(newer);
+    if(!next||!older)return next;
+    for(const key of ['testDate','compressionDate','specimenDate','improvementDate']){
+      const known=[next[key],next.draftFields?.[key],older.draftFields?.[key],older[key]].find(hasMassValue);
+      if(!hasMassValue(known))continue;
+      if(!hasMassValue(next[key]))next[key]=known;
+      if(next.draft&&!hasMassValue(next.draftFields?.[key])){
+        next.draftFields={...(next.draftFields||{}),[key]:known};
+      }
+    }
+    return next;
+  }
+
   function mergeProjects(a,b){
     if(!a)return clone(b);
     if(!b)return clone(a);
@@ -122,7 +137,7 @@
         if(!old){merged.set(key,clone(t));return;}
         const newer=testStamp(t)>=testStamp(old)?t:old;
         const older=newer===t?old:t;
-        merged.set(key,preserveUnconfined(preserveGrainMass(newer,older),older));
+        merged.set(key,preserveTestDates(preserveUnconfined(preserveGrainMass(newer,older),older),older));
       });
     };
     add(a.tests);add(b.tests);
