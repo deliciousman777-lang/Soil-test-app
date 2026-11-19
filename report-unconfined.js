@@ -1,4 +1,4 @@
-// データシート：一軸圧縮試験（写真様式 / 3配合 × 3供試体）
+// データシート：一軸圧縮試験（写真様式 / 1ページ3水準×3供試体、以降は次ページ）
 (function(){
   'use strict';
 
@@ -58,7 +58,7 @@
       const av=finite(a.dosage)?Number(a.dosage):Number.POSITIVE_INFINITY;
       const bv=finite(b.dosage)?Number(b.dosage):Number.POSITIVE_INFINITY;
       return av-bv;
-    }).slice(0,3);
+    });
   }
 
   function date(v){
@@ -124,9 +124,10 @@
     </div>`;
   }
 
-  function page(p,sample,arr){
+  function page(p,sample,arr,pageIndex=0){
     const cardNo=String(p?.constructionCardNo||'').trim().toUpperCase();
-    return `<section class="report-page ucs-page" id="reportUnconfinedPage">
+    const id=pageIndex===0?'reportUnconfinedPage':'reportUnconfinedPage'+(pageIndex+1);
+    return `<section class="report-page ucs-page" id="${id}">
       <div class="ucs-head">
         <div class="ucs-title-line"><span>件　名</span><strong>${esc(p?.name||'')}</strong></div>
         <div class="ucs-sheet-name">一軸圧縮試験　データシート</div>
@@ -135,6 +136,14 @@
       <div class="ucs-blocks">${[0,1,2].map(i=>block(arr[i]||null,i,sample)).join('')}</div>
       <div class="ucs-foot">JIS A 1216 / JGS 0511</div>
     </section>`;
+  }
+
+  function pages(p,sample,arr){
+    const result=[];
+    for(let start=0;start<arr.length;start+=3){
+      result.push(page(p,sample,arr.slice(start,start+3),start/3));
+    }
+    return result.join('');
   }
 
   function styles(){
@@ -170,12 +179,17 @@
     const sample=sel.value||'';
     const existing=root.querySelector('#reportUnconfinedPage');
     const arr=testRows(p,sample);
-    // ほかの試験シートの MutationObserver と再描画ループにならないようにする。
-    if(existing?.dataset.reportSample===sample){renumber(root);return;}
-    if(existing)existing.remove();
+    const count=Math.ceil(arr.length/3);
+    const signature=JSON.stringify(arr.map(t=>[t.id,t.dosage,t.updatedAt,t.draftSavedAt,t.createdAt]));
+    // 他のシートの MutationObserver と再描画ループを起こさないよう、変更時のみ更新する。
+    if(existing?.dataset.reportSample===sample&&existing?.dataset.reportSignature===signature&&
+      root.querySelectorAll(':scope > .ucs-page').length===count){renumber(root);return;}
+    root.querySelectorAll(':scope > .ucs-page').forEach(node=>node.remove());
     if(arr.length){
-      root.insertAdjacentHTML('beforeend',page(p,sample,arr));
-      root.querySelector('#reportUnconfinedPage').dataset.reportSample=sample;
+      root.insertAdjacentHTML('beforeend',pages(p,sample,arr));
+      const first=root.querySelector('#reportUnconfinedPage');
+      first.dataset.reportSample=sample;
+      first.dataset.reportSignature=signature;
     }
     renumber(root);
   }
@@ -192,9 +206,9 @@
       const pr=document.getElementById('soilnotePrintRoot');
       const p=project(),sel=document.getElementById('reportSampleSelect');
       if(pr&&p&&sel){
-        pr.querySelector('#reportUnconfinedPage')?.remove();
+        pr.querySelectorAll(':scope > .ucs-page').forEach(node=>node.remove());
         const arr=testRows(p,sel.value||'');
-        if(arr.length)pr.insertAdjacentHTML('beforeend',page(p,sel.value||'',arr));
+        if(arr.length)pr.insertAdjacentHTML('beforeend',pages(p,sel.value||'',arr));
         renumber(pr);
       }
       return previousPrint.apply(this,args);
