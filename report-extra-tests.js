@@ -98,19 +98,19 @@
 
   function patchPageCounters(root,total){
     if(!root)return;
-    const p1=root.querySelector('#reportPage1 > .r-small');
-    const p2=root.querySelector('#reportPage2 > .r-small');
-    const p3=root.querySelector('#reportPage3 > .r-small');
-    if(p1)p1.textContent=`1 / ${total}`;
-    if(p2)p2.textContent=`2 / ${total}`;
-    if(p3)p3.textContent=`3 / ${total}`;
+    const pages=[...root.querySelectorAll(':scope > .report-page')];
+    const count=pages.length||total;
+    pages.forEach((page,i)=>{
+      const label=page.querySelector(':scope > .r-small, :scope > .ucs-page-info');
+      if(label)label.textContent=label.textContent.replace(/\d+\s*\/\s*\d+\s*$/, `${i+1} / ${count}`);
+    });
   }
 
   function patchCounters(total){
     const root=document.getElementById('reportPages');
     patchPageCounters(root,total);
     const hint=document.querySelector('#reportSheetDialog .report-ui span');
-    if(hint)hint.textContent=total===3?'保存済み試験から1・2・3枚目を自動作成':'保存済み試験から1・2枚目を自動作成';
+    if(hint)hint.textContent=`保存済み試験から全 ${root?.querySelectorAll(':scope > .report-page').length||total} 枚を自動作成`;
   }
 
   function enhance(){
