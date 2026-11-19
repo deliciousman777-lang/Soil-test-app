@@ -271,7 +271,19 @@
     document.getElementById('unconfinedSubmit').textContent='入力済み水準をまとめて保存';
     switchLevel(levelValues[0],false);
   }
-  function openNew(){if(!samples().length){alert('先に試料を登録してください。');return;}reset();dialog().showModal();}
+  function openNew(){
+    const list=samples();
+    if(!list.length){alert('先に試料を登録してください。');return;}
+    const p=currentProject();
+    const selected=list.find(s=>s.id===String(p?.activeSampleId||''))||list[0];
+    // 同じ試料に入力途中の一軸試験があれば、新規追加せずその続きへ。
+    // 既に重複している場合も削除はせず、最新の途中保存から再開する。
+    const drafts=(p?.tests||[]).filter(t=>t.type===TYPE&&t.draft&&String(t.sample||'')===selected.name)
+      .sort((a,b)=>String(b.draftSavedAt||b.updatedAt||b.createdAt||'')
+        .localeCompare(String(a.draftSavedAt||a.updatedAt||a.createdAt||'')));
+    if(drafts.length){openEdit(drafts[0].id);return;}
+    reset();dialog().showModal();
+  }
 
   function openEdit(id){
     const p=currentProject(),t=p?.tests?.find(x=>x.id===id&&x.type===TYPE);if(!t)return;
