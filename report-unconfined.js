@@ -81,6 +81,14 @@
     return esc(t?.sample||fallbackSample||'');
   }
 
+  // 空の供試体（状態や寸法だけが自動設定されたものも含む）には番号を印字しない。
+  function recorded(s){
+    const m=s?.moisture||{};
+    return [s?.mass,s?.maxStrength,m.ma,m.mb,m.mc].some(v=>v!==null&&v!==undefined&&v!=='')||
+      Boolean(String(s?.note||'').trim())||Boolean(String(m.containerNo||'').trim())||
+      (Array.isArray(s?.sketch)&&s.sketch.length>0);
+  }
+
   function block(test,index,fallbackSample){
     const t=test||{};
     const ss=Array.from({length:3},(_,i)=>(Array.isArray(t.specimens)?t.specimens[i]:null)||{});
@@ -89,7 +97,7 @@
         <table class="ucs-table" aria-label="一軸圧縮試験 配合${index+1}">
           <tr><th>試　料　名</th><td colspan="3" class="ucs-sample">${displaySample(test,fallbackSample)}${t.draft?' <small>（途中保存）</small>':''}</td></tr>
           <tr><th>試　験　日</th><td class="ucs-date-label">改良日</td><td>${esc(date(t.improvementDate))}</td><td class="ucs-date-cell"><span>圧縮日</span><b>${esc(date(t.compressionDate))}</b></td></tr>
-          <tr><th>供 試 体 番 号</th>${ss.map((_,i)=>`<td>${i+1}</td>`).join('')}</tr>
+          <tr><th>供 試 体 番 号</th>${ss.map((s,i)=>`<td>${recorded(s)?i+1:''}</td>`).join('')}</tr>
           <tr><th>供 試 体 状 態</th>${ss.map(s=>`<td>${esc(s.state||'')}</td>`).join('')}</tr>
           <tr><th>質　量　(g)</th>${ss.map(s=>`<td>${f(s.mass,1)}</td>`).join('')}</tr>
           <tr><th>直 径 D　(cm)</th>${ss.map(s=>`<td>${f(s.diameter,2)}</td>`).join('')}</tr>
@@ -102,7 +110,7 @@
         ${ss.map((s,i)=>{
           const m=s.moisture||{};
           return `<div class="ucs-spec">
-            <div class="ucs-no">${i+1}</div>
+            <div class="ucs-no">${recorded(s)?i+1:''}</div>
             <div class="ucs-sketch">${sketchSvg(s.sketch)}</div>
             <table class="ucs-moist" aria-label="供試体${i+1}の含水比容器データ">
               <tr><th>容器</th><td>${esc(m.containerNo||'')}</td></tr>
