@@ -154,11 +154,13 @@
     }
     let test=state.editingTestId?testById(state.editingTestId):null;
     if(test&&test.type!==cfg.type)test=null;
+    // 「続き」で再開した元のレコードIDを全試験で優先して再利用する。
+    // 一軸の水準切替でeditingTestIdがnullになっても新規レコードを作らない。
+    const draftId=form.dataset.draftTestId;
+    const linked=draftId?testById(draftId):null;
+    if(linked?.type===cfg.type) test=linked;
     if(!test&&cfg.type==='grain'){
-      const draftId=form.dataset.draftTestId;
-      const linked=draftId?testById(draftId):null;
-      if(linked?.type==='grain')test=linked;
-      else test=window.SoilNoteSedimentationWorkbench?.resolveGrainDraft?.(fields,p.id)||null;
+      test=window.SoilNoteSedimentationWorkbench?.resolveGrainDraft?.(fields,p.id)||null;
     }
     // Preserve valid readings in the auto-saved test even if a stale
     // grain form is saved after the 24-hour measurement has finished.
