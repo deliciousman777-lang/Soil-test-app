@@ -140,6 +140,18 @@
       }
     }
     if(Object.keys(deletedTestIds).length)base.deletedTestIds=deletedTestIds;
+    // 一軸の追加水準（200など）を共有端末どうしで和集合にして保持する。
+    // 試験結果と別に保存されるため、未入力の水準も同期で消えない。
+    const choiceMap={};
+    for(const source of [a?.unconfinedLevelChoices,b?.unconfinedLevelChoices]){
+      if(!source||typeof source!=='object'||Array.isArray(source))continue;
+      for(const [sample,levels] of Object.entries(source)){
+        if(!Array.isArray(levels))continue;
+        choiceMap[sample]=[...new Set([...(choiceMap[sample]||[]),...levels]
+          .map(v=>Number(v)).filter(v=>Number.isFinite(v)&&v>=0))].sort((x,y)=>x-y);
+      }
+    }
+    if(Object.keys(choiceMap).length)base.unconfinedLevelChoices=choiceMap;
     const merged = new Map();
     const add=(list)=>{
       (Array.isArray(list)?list:[]).forEach((t,i)=>{
