@@ -37,16 +37,44 @@
     syncDosages();
   }
 
+  // 水準の登録と測定データの登録を分ける。200等の未測定水準も再表示できる。
+  const BASE_LEVELS=[50,100,150,200];
+  function choicesKey(sample){
+    const p=typeof currentProject==='function'?currentProject():null;
+    const entry=(p?.samples||[]).find(x=>String(x.name||'').trim()===String(sample||'').trim());
+    return String(entry?.id||sample||'').trim();
+  }
+  function storedChoices(sample){
+    const p=typeof currentProject==='function'?currentProject():null;
+    const choices=p?.unconfinedLevelChoices||{};
+    const key=choicesKey(sample);
+    return [...(Array.isArray(choices[key])?choices[key]:[]),
+      ...(key!==sample&&Array.isArray(choices[sample])?choices[sample]:[])];
+  }
+  function registerLevel(sample,value){
+    const p=typeof currentProject==='function'?currentProject():null;
+    const level=n(value),key=choicesKey(sample);
+    if(!p||!key||level===null||level<0)return;
+    const all=p.unconfinedLevelChoices&&typeof p.unconfinedLevelChoices==='object'
+      ?p.unconfinedLevelChoices:{};
+    const current=[...new Set(storedChoices(sample).map(n).filter(v=>v!==null&&v>=0))];
+    if(current.includes(level))return;
+    p.unconfinedLevelChoices={...all,[key]:[...current,level].sort((a,b)=>a-b)};
+    p.updatedAt=new Date().toISOString();
+    saveData();
+  }
   function doseChoices(sample){
     const p=typeof currentProject==='function'?currentProject():null;
     const mix=latestMix(sample);
     const mixValues=(mix?.additions||[]).map(a=>n(a.dosage)).filter(v=>v!==null&&v>=0);
-    const saved=(p?.tests||[]).filter(t=>t.type===TYPE&&String(t.sample||'')===String(sample||''))
-      .map(t=>n(t.dosage)).filter(v=>v!==null&&v>=0);
-    const result=[];
-    [...mixValues,...saved].forEach(v=>{if(!result.includes(v))result.push(v);});
-    if(result.length<3)[50,100,150].forEach(v=>{if(result.length<3&&!result.includes(v))result.push(v);});
-    return result.sort((a,b)=>a-b);
+    const related=(p?.tests||[]).filter(t=>t.type===TYPE&&String(t.sample||'')===String(sample||''));
+    const saved=related.map(t=>n(t.dosage)).filter(v=>v!==null&&v>=0);
+    // 旧バージョンの途中保存にも追加済みの水準が残っていれば復元する。
+    const draftLevels=related.flatMap(t=>[
+      ...(t.draftExtra?.levels||[]),
+      ...Object.keys(t.draftExtra?.cache||{})]);
+    return [...new Set([...BASE_LEVELS,...mixValues,...saved,...storedChoices(sample),...draftLevels]
+      .map(n).filter(v=>v!==null&&v>=0))].sort((a,b)=>a-b);
   }
   function syncDosages(selected=null){
     const f=form();if(!f)return;
@@ -246,7 +274,7 @@
     });
     f.elements.dosage.addEventListener('change',()=>{
       const v=selectedDosage();
-      if(v!==null)switchLevel(v);
+      if(v!==null){registerLevel(f.elements.sample.value,v);switchLevel(v);}
       else toggleManualDosage();
     });
     f.addEventListener('submit',saveTest);
@@ -257,7 +285,10 @@
       const raw=prompt('追加する添加量を kg/m³ で入力してください（例：200）');
       if(raw===null)return;const value=n(raw);
       if(value===null||value<0){alert('0以上の数値を入力してください。');return;}
+      registerLevel(f.elements.sample.value,value);
       switchLevel(value);
+      // 一覧へ戻ったときも追加した未入力水準が見える。
+      renderTests();
     });
     d.querySelector('#unconfinedClose').addEventListener('click',()=>d.close());d.querySelector('#unconfinedCancel').addEventListener('click',()=>d.close());d.addEventListener('click',e=>{const b=e.target.closest('[data-clear-sketch]');if(b)clearSketch(Number(b.dataset.clearSketch));const toggle=e.target.closest('[data-toggle-sketch]');if(toggle){const i=Number(toggle.dataset.toggleSketch);setSketchMode(i,canvas(i)?.dataset.drawMode!=='on');}});
     [1,2,3].forEach(attachCanvas);
@@ -355,20 +386,47 @@
       groups.get(key).push({card,test:t});
     });
     groups.forEach(rows=>{
-      if(rows.length<2)return;
       rows.sort((a,b)=>(n(a.test.dosage)??Infinity)-(n(b.test.dosage)??Infinity));
+      const sample=String(rows[0].test.sample||'');
+      const levels=doseChoices(sample);
+      if(levels.length<2)return;
       const bar=document.createElement('div');bar.className='unconfined-card-levels';
-      const buttons=rows.map((row,i)=>{
+      const selections=levels.map(level=>{
+        const existing=rows.find(row=>levelKey(row.test.dosage)===levelKey(level));
+        if(existing)return {...existing,level};
+        // 入力値なしの水準は実際の試験レコードを作らない。
+        const card=document.createElement('article');
+        card.className='card unconfined-empty-level-card';
+        card.innerHTML=`<div class="card-title-row"><div><p class="test-kind">一軸圧縮試験</p><h3>${esc(sample)} ｜ ${esc(level)} kg/m³</h3></div></div><div class="value" style="font-size:20px;color:#677770">未入力 <small>測定データはまだありません</small></div><button type="button" class="ghost unconfined-start-level">この水準を入力</button>`;
+        rows[rows.length-1].card.after(card);
+        card.querySelector('.unconfined-start-level').addEventListener('click',()=>{
+          const draft=(p.tests||[]).filter(t=>t.type===TYPE&&t.draft&&String(t.sample||'')===sample)
+            .sort((a,b)=>String(b.draftSavedAt||b.updatedAt||b.createdAt||'')
+              .localeCompare(String(a.draftSavedAt||a.updatedAt||a.createdAt||'')))[0];
+          if(draft){
+            // 既存ドラフトの復元処理を使い、入力途中のデータを保持する。
+            const btn=[...document.querySelectorAll('[data-edit-unconfined]')]
+              .find(x=>x.dataset.editUnconfined===String(draft.id));
+            if(btn){btn.click();setTimeout(()=>switchLevel(level),0);return;}
+          }
+          openEdit(rows[0].test.id);
+          switchLevel(level);
+        });
+        return {card,test:null,level};
+      });
+      const buttons=selections.map((row,i)=>{
         const b=document.createElement('button');b.type='button';
-        b.textContent=(n(row.test.dosage)!==null?Number(row.test.dosage).toLocaleString('ja-JP'):'—')+' kg/m³';
+        b.textContent=Number(row.level).toLocaleString('ja-JP')+' kg/m³';
+        if(!row.test)b.title='未入力';
         b.addEventListener('click',()=>show(i));bar.appendChild(b);return b;
       });
       function show(i){
-        rows.forEach((row,j)=>row.card.classList.toggle('hidden',i!==j));
+        selections.forEach((row,j)=>row.card.classList.toggle('hidden',i!==j));
         buttons.forEach((b,j)=>b.classList.toggle('active',i===j));
-        rows[i].card.prepend(bar);
+        selections[i].card.prepend(bar);
       }
-      show(0);
+      const firstSaved=selections.findIndex(row=>row.test);
+      show(firstSaved>=0?firstSaved:0);
     });
   }
   const baseRender=renderTests;renderTests=function(){
