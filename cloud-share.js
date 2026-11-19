@@ -129,6 +129,17 @@
     if(!a)return clone(b);
     if(!b)return clone(a);
     const base = clone(projectStamp(a) >= projectStamp(b) ? a : b);
+    // 削除履歴を両端末から統合する。新しい端末の保存で古い削除情報を消さない。
+    const deletedTestIds={};
+    for(const source of [a?.deletedTestIds,b?.deletedTestIds]){
+      if(!source||typeof source!=='object'||Array.isArray(source))continue;
+      for(const [id,stamp] of Object.entries(source)){
+        if(!id)continue;
+        if(!Object.prototype.hasOwnProperty.call(deletedTestIds,id)||
+           timeOf(stamp)>timeOf(deletedTestIds[id]))deletedTestIds[id]=stamp;
+      }
+    }
+    if(Object.keys(deletedTestIds).length)base.deletedTestIds=deletedTestIds;
     const merged = new Map();
     const add=(list)=>{
       (Array.isArray(list)?list:[]).forEach((t,i)=>{
@@ -141,10 +152,12 @@
       });
     };
     add(a.tests);add(b.tests);
-    const tests=[...merged.values()].sort((x,y)=>{
-      const d=timeOf(x?.createdAt)-timeOf(y?.createdAt);
-      return d || String(x?.id||'').localeCompare(String(y?.id||''));
-    });
+    const tests=[...merged.values()]
+      .filter(t=>!Object.prototype.hasOwnProperty.call(deletedTestIds,String(t?.id||'')))
+      .sort((x,y)=>{
+        const d=timeOf(x?.createdAt)-timeOf(y?.createdAt);
+        return d || String(x?.id||'').localeCompare(String(y?.id||''));
+      });
     const before=JSON.stringify(Array.isArray(base.tests)?base.tests:[]);
     base.tests=tests;
     if(JSON.stringify(tests)!==before)base.updatedAt=new Date().toISOString();
