@@ -103,10 +103,17 @@
     });
     return {fields,sketches:[1,2,3].map(i=>clone(t?.specimens?.[i-1]?.sketch||[]))};
   }
+  // 状態と寸法は初期値が自動反映されるので、実測した供試体だけを対象にする。
+  function hasSpecimenData(s){
+    const m=s.moisture||{};
+    return s.mass!==null||s.maxStrength!==null||Boolean(s.note)||
+      Boolean(m.containerNo)||[m.ma,m.mb,m.mc].some(v=>v!==null)||
+      (s.sketch||[]).length>0;
+  }
   function hasLevelData(snapshot){
     const fields=snapshot?.fields||{};
     return [1,2,3].some(i=>
-      ['state','mass','diameter','height','maxStrength','note','containerNo','ma','mb','mc']
+      ['mass','maxStrength','note','containerNo','ma','mb','mc']
       .some(k=>String(fields[k+i]??'').trim()!=='')||(snapshot?.sketches?.[i-1]||[]).length>0);
   }
   function renderLevelTabs(){
@@ -138,21 +145,26 @@
     state.editingTestId=existing?.id||draftOriginId||null;
     updatePreview();renderLevelTabs();
     const note=document.getElementById('unconfinedLevelNote');
-    if(note)note.textContent=key+' kg/m³・供試体3本';
+    if(note)note.textContent=key+' kg/m³・供試体1〜3本（未使用欄は空白）';
   }
   function specimensFromSnapshot(snap){
     const fields=snap.fields||{};
     return [1,2,3].map(i=>{
       const ma=n(fields['ma'+i]),mb=n(fields['mb'+i]),mc=n(fields['mc'+i]);
       const containerNo=String(fields['containerNo'+i]||'').trim();
-      const entered=containerNo!==''||[ma,mb,mc].some(v=>v!==null);
-      const valid=!entered||(ma!==null&&mb!==null&&mc!==null&&ma>=mb&&mb>mc);
-      return {
+      const complete=[ma,mb,mc].every(v=>v!==null);
+      const valid=!complete||(ma>=mb&&mb>mc);
+      const result={
         no:i,state:String(fields['state'+i]||'').trim(),mass:n(fields['mass'+i]),
         diameter:n(fields['diameter'+i]),height:n(fields['height'+i]),
         maxStrength:n(fields['maxStrength'+i]),note:String(fields['note'+i]||'').trim(),
-        moisture:{containerNo,ma,mb,mc,w:valid&&entered?(ma-mb)/(mb-mc)*100:null,valid},
+        moisture:{containerNo,ma,mb,mc,w:valid&&complete?(ma-mb)/(mb-mc)*100:null,valid},
         sketch:clone(snap.sketches?.[i-1]||[])
+      };
+      // 使わない供試体の自動入力値をデータシートに載せない。
+      return hasSpecimenData(result)?result:{
+        no:i,state:'',mass:null,diameter:null,height:null,maxStrength:null,note:'',
+        moisture:{containerNo:'',ma:null,mb:null,mc:null,w:null,valid:true},sketch:[]
       };
     });
   }
@@ -162,8 +174,9 @@
     const ma=n(f.elements[`ma${i}`].value),mb=n(f.elements[`mb${i}`].value),mc=n(f.elements[`mc${i}`].value);
     const entered=containerNo!==''||[ma,mb,mc].some(v=>v!==null);
     if(!entered)return {containerNo:'',ma:null,mb:null,mc:null,w:null,valid:true};
-    const valid=ma!==null&&mb!==null&&mc!==null&&ma>=mb&&mb>mc;
-    return {containerNo,ma,mb,mc,w:valid?(ma-mb)/(mb-mc)*100:null,valid};
+    const complete=[ma,mb,mc].every(v=>v!==null);
+    const valid=!complete||(ma>=mb&&mb>mc);
+    return {containerNo,ma,mb,mc,w:valid&&complete?(ma-mb)/(mb-mc)*100:null,valid};
   }
   function specimen(i){
     const f=form();return {
@@ -219,7 +232,7 @@
       <div class="unconfined-top"><label>試料名 / No.<select name="sample" required></select></label><label class="hidden">配合<select name="dosage"></select></label><label id="unconfinedDosageManualWrap" class="hidden">添加量 (kg/m³)<input name="dosageManual" inputmode="decimal"></label><label>改良日<input name="improvementDate" type="date"></label><label>圧縮日<input name="compressionDate" type="date"></label></div>
       <div class="unconfined-level-switch"><div class="unconfined-level-head"><strong>添加量（kg/m³）・水準切り替え</strong><button type="button" class="ghost" id="unconfinedAddLevel">＋水準追加</button></div><div id="unconfinedLevelButtons" class="unconfined-level-buttons"></div><small id="unconfinedLevelNote">水準を選択してください</small><small>水準を切り替えても入力中の数値とスケッチは残ります。保存で入力済みの水準をまとめて登録します。</small></div>
       <div class="unconfined-specimens">${specimenCard(1)}${specimenCard(2)}${specimenCard(3)}</div>
-      <div id="unconfinedCheck" class="mass-check">3本の質量・直径・高さ・最大値を入力してください。含水比と破壊スケッチは任意です。</div><div class="dialog-actions"><button type="button" class="ghost" id="unconfinedCancel">キャンセル</button><button class="primary" id="unconfinedSubmit">保存</button></div></form>`;document.body.appendChild(d);
+      <div id="unconfinedCheck" class="mass-check">供試体は1〜3本まで入力可能です。未使用の供試体は空欄で保存でき、入力済みの数値はデータシートに反映されます。</div><div class="dialog-actions"><button type="button" class="ghost" id="unconfinedCancel">キャンセル</button><button class="primary" id="unconfinedSubmit">保存</button></div></form>`;document.body.appendChild(d);
     const style=document.createElement('style');style.id='unconfinedStyles';style.textContent=`
       .unconfined-dialog{max-height:calc(100dvh - 24px);overflow-y:auto;overscroll-behavior-y:contain;-webkit-overflow-scrolling:touch}
       .unconfined-top{display:grid;grid-template-columns:1.3fr 1fr 1fr 1fr 1fr;gap:8px}.unconfined-specimens{display:grid;gap:12px;margin-top:12px}.unconfined-specimen{padding:13px;border:1px solid var(--line,#dfe7e3);border-radius:15px;background:#fff}.unconfined-main-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:7px}.unconfined-lower{display:grid;grid-template-columns:180px 1fr;gap:12px;margin-top:10px}.unconfined-sketch-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:5px}.unconfined-sketch-head button{padding:5px 8px;font-size:11px}.unconfined-specimen canvas{display:block;width:150px;height:210px;border:1px dashed #7d8783;background:#fff;touch-action:pan-y}.unconfined-moisture{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;align-content:start}.unconfined-moisture>strong{grid-column:1/-1}.unconfined-w{display:flex;align-items:center;justify-content:space-between;border:1px solid var(--line,#dfe7e3);border-radius:11px;padding:8px 10px;background:#f8fbfa}.unconfined-w strong{color:var(--accent-dark,#0b5136)}@media(max-width:900px){.unconfined-top{grid-template-columns:1fr 1fr}.unconfined-main-grid{grid-template-columns:repeat(3,1fr)}}@media(max-width:560px){.unconfined-top,.unconfined-main-grid,.unconfined-lower{grid-template-columns:1fr}.unconfined-moisture{grid-template-columns:1fr 1fr}.unconfined-specimen canvas{width:100%;max-width:220px;height:250px}}
@@ -287,9 +300,7 @@
     for(const entry of entries){
       const specimens=specimensFromSnapshot(entry.snapshot);
       for(const specimen of specimens){
-        if([specimen.mass,specimen.diameter,specimen.height,specimen.maxStrength].some(v=>v===null)){
-          alert(entry.dosage+' kg/m³：供試体'+specimen.no+'の質量・直径・高さ・最大値を入力してください。未完成なら「途中保存」を利用してください。');return;
-        }
+        // 必要本数だけ保存。含水比の3質量が揃う前は計算せず、入力値は保持する。
         if(!specimen.moisture.valid){
           alert(entry.dosage+' kg/m³：供試体'+specimen.no+'の含水比質量を確認してください。');return;
         }
@@ -315,7 +326,7 @@
     }
     p.updatedAt=now;saveData();dialog().close();reset();renderTests();
   }
-  function card(t){const strengths=(t.specimens||[]).map(s=>n(s.maxStrength)).filter(v=>v!==null);const avg=strengths.length?strengths.reduce((a,b)=>a+b,0)/strengths.length:null;return `<div class="card-title-row"><div><p class="test-kind">一軸圧縮試験</p><h3>${esc(t.sample||'')} ｜ ${n(t.dosage)!==null?Number(t.dosage).toFixed(0):'—'} kg/m³</h3><p>${new Date(t.createdAt).toLocaleString('ja-JP')}${t.updatedAt?' ｜ 訂正済み':''}</p></div><button type="button" class="edit-btn" data-edit-unconfined="${esc(t.id)}">訂正</button></div><div class="fraction-card-row"><div><span>供試体1</span><strong>${strengths[0]!=null?strengths[0].toFixed(1):'—'} kN/m²</strong></div><div><span>供試体2</span><strong>${strengths[1]!=null?strengths[1].toFixed(1):'—'} kN/m²</strong></div><div><span>供試体3</span><strong>${strengths[2]!=null?strengths[2].toFixed(1):'—'} kN/m²</strong></div><div><span>平均</span><strong>${avg!==null?avg.toFixed(1):'—'} kN/m²</strong></div></div>`;}
+  function card(t){const strengths=[0,1,2].map(i=>n(t.specimens?.[i]?.maxStrength));const measured=strengths.filter(v=>v!==null);const avg=measured.length?measured.reduce((a,b)=>a+b,0)/measured.length:null;return `<div class="card-title-row"><div><p class="test-kind">一軸圧縮試験</p><h3>${esc(t.sample||'')} ｜ ${n(t.dosage)!==null?Number(t.dosage).toFixed(0):'—'} kg/m³</h3><p>${new Date(t.createdAt).toLocaleString('ja-JP')}${t.updatedAt?' ｜ 訂正済み':''}</p></div><button type="button" class="edit-btn" data-edit-unconfined="${esc(t.id)}">訂正</button></div><div class="fraction-card-row"><div><span>供試体1</span><strong>${strengths[0]!=null?strengths[0].toFixed(1):'—'} kN/m²</strong></div><div><span>供試体2</span><strong>${strengths[1]!=null?strengths[1].toFixed(1):'—'} kN/m²</strong></div><div><span>供試体3</span><strong>${strengths[2]!=null?strengths[2].toFixed(1):'—'} kN/m²</strong></div><div><span>平均</span><strong>${avg!==null?avg.toFixed(1):'—'} kN/m²</strong></div></div>`;}
   const baseCard=renderMoistureCard;renderMoistureCard=function(t){if(t?.type===TYPE)return card(t);return baseCard(t);};
 
   function compactSavedLevels(){
