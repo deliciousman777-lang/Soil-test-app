@@ -49,6 +49,14 @@ function normalizeConstructionCardNo(value = '') {
   return String(value).trim().toUpperCase().replace(/\s+/g, '');
 }
 
+// Read the plan before the form resets. Save it in the same transaction as project info.
+// When the optional plan UI is absent, preserve the existing selection on edits.
+function selectedPlannedTests(form, previous = []) {
+  const choices = [...(form?.querySelectorAll('input[name="plannedTestType"]') || [])];
+  if (!choices.length) return Array.isArray(previous) ? [...previous] : [];
+  return [...new Set(choices.filter(input => input.checked).map(input => input.value))];
+}
+
 function format(n, digits = 3) {
   return Number(n).toLocaleString('ja-JP', { maximumFractionDigits: digits });
 }
@@ -482,6 +490,7 @@ function saveProjectInfo(e) {
   p.location = form.elements.location.value.trim();
   p.constructionCardNo = normalizeConstructionCardNo(form.elements.constructionCardNo.value);
   p.client = form.elements.client.value.trim();
+  p.plannedTests = selectedPlannedTests(form, p.plannedTests);
   p.updatedAt = new Date().toISOString();
   saveData();
   document.getElementById('projectInfoDialog')?.close();
@@ -513,6 +522,7 @@ projectForm.addEventListener('submit', e => {
     constructionCardNo: normalizeConstructionCardNo(fd.get('constructionCardNo')),
     client: String(fd.get('client')).trim(),
     tests: [],
+    plannedTests: selectedPlannedTests(projectForm),
     createdAt: now,
     updatedAt: now,
   };
