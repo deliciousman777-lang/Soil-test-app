@@ -273,10 +273,73 @@
     p.updatedAt=now;saveData();dialogEl().close();resetForm();renderTests();
   }
 
-  function renderCard(t){return `<div class="card-title-row"><div><p class="test-kind">突固めによる土の締固め試験</p><h3>${esc(t.sample)}</h3><p>${new Date(t.createdAt).toLocaleString('ja-JP')}${t.updatedAt?' ｜ 訂正済み':''}</p></div><button type="button" class="edit-btn" data-edit-compaction="${esc(t.id)}">訂正</button></div><div class="fraction-card-row"><div><span>最大乾燥密度 ρdmax</span><strong>${num(t.maxDryDensity)?.toFixed(3)??'—'} g/cm³</strong></div><div><span>最適含水比 wopt</span><strong>${num(t.optimumWaterContent)?.toFixed(1)??'—'} %</strong></div><div><span>95% / 90%</span><strong>${num(t.dryDensity95)?.toFixed(3)??'—'} / ${num(t.dryDensity90)?.toFixed(3)??'—'}</strong></div></div><div class="meta"><span>方法 ${esc(t.method||'—')}</span><span>測定 ${(t.points||[]).filter(p=>Number.isFinite(Number(p.dryDensity))).length}点</span></div>`;}
+  // Saved compaction tests have their own printable data sheet (not the generic soil sheet).
+  function openCompactionSheet(id){
+    const project=currentProject();
+    const test=project?.tests?.find(t=>String(t.id)===String(id)&&t.type===TYPE);
+    if(!test)return;
+    let dialog=document.getElementById('compactionSheetDialog');
+    if(!dialog){
+      dialog=document.createElement('dialog');
+      dialog.id='compactionSheetDialog';
+      dialog.className='wide-dialog';
+      document.body.appendChild(dialog);
+      const style=document.createElement('style');
+      style.textContent=`
+        #compactionSheetDialog{width:min(980px,96vw);max-height:92vh;padding:16px;border:0;border-radius:14px;overflow:auto}
+        .cs-actions{display:flex;gap:10px;justify-content:flex-end;margin-bottom:12px}
+        .cs-page{background:#fff;color:#202c27;padding:24px;font-family:Arial,"Noto Sans JP",sans-serif}
+        .cs-page h2{text-align:center;font-size:20px;margin:0 0 16px}
+        .cs-page h3{font-size:14px;margin:16px 0 6px}
+        .cs-page table{width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed}
+        .cs-page th,.cs-page td{border:1px solid #69756f;padding:6px 4px;text-align:center;overflow-wrap:anywhere}
+        .cs-page th{background:#f0f4f2}
+        .cs-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:12px 0}
+        .cs-summary div{border:1px solid #8b9d94;padding:9px;text-align:center;font-size:12px}
+        .cs-summary strong{display:block;font-size:17px;margin-top:5px}
+        .cs-chart{margin-top:10px;border:1px solid #bdc8c1}
+        .cs-chart svg{display:block;width:100%;height:auto}
+        @media(max-width:600px){.cs-page{padding:8px}.cs-page table{font-size:9px}.cs-page th,.cs-page td{padding:4px 2px}.cs-summary{grid-template-columns:1fr 1fr}.cs-summary strong{font-size:15px}}
+        @media print{body>*:not(#compactionSheetDialog){display:none!important}#compactionSheetDialog{position:static!important;display:block!important;width:100%!important;max-height:none!important;overflow:visible!important;padding:0!important;border:0!important}#compactionSheetDialog::backdrop{display:none!important}.cs-actions{display:none!important}.cs-page{padding:0!important}.cs-page table{font-size:10px}.cs-chart{break-inside:avoid}@page{size:A4 portrait;margin:12mm}}
+      `;
+      document.head.appendChild(style);
+    }
+    const fmt=(value,d=2)=>num(value)===null?'—':num(value).toFixed(d);
+    const cells=(arr)=>arr.map(v=>'<td>'+esc(v)+'</td>').join('');
+    const points=(test.points||[]).slice().sort((a,b)=>(a.index||0)-(b.index||0));
+    const rows=points.map(p=>'<tr>'+cells([p.index??'—',fmt(p.moldSoilMass,1),fmt(p.w,2),fmt(p.wetDensity,3),fmt(p.dryDensity,3)])+'</tr>').join('');
+    const waterRows=points.flatMap(p=>(p.waters||[]).map((w,j)=>'<tr>'+cells([p.index??'—',j+1,w.containerNo||'—',fmt(w.ma,2),fmt(w.mb,2),fmt(w.mc,2),fmt(w.w,2)])+'</tr>')).join('');
+    const valid=points.filter(p=>num(p.w)!==null&&num(p.dryDensity)!==null).sort((a,b)=>a.w-b.w);
+    let chart='<p>有効な測定点がありません。</p>';
+    if(valid.length){
+      const all=valid.concat(num(test.optimumWaterContent)!==null&&num(test.maxDryDensity)!==null?[{w:test.optimumWaterContent,dryDensity:test.maxDryDensity}]:[]);
+      let minX=Math.min(...all.map(p=>Number(p.w))),maxX=Math.max(...all.map(p=>Number(p.w)));
+      let minY=Math.min(...all.map(p=>Number(p.dryDensity))),maxY=Math.max(...all.map(p=>Number(p.dryDensity)));
+      const dx=Math.max(1,(maxX-minX)*.15),dy=Math.max(.02,(maxY-minY)*.2);
+      minX-=dx;maxX+=dx;minY-=dy;maxY+=dy;
+      const W=720,H=330,L=62,T=18,R=20,B=42;
+      const x=v=>L+(Number(v)-minX)/(maxX-minX)*(W-L-R);
+      const y=v=>T+(maxY-Number(v))/(maxY-minY)*(H-T-B);
+      const lines=Array.from({length:6},(_,i)=>{
+        const xx=L+i*(W-L-R)/5,yy=T+i*(H-T-B)/5;
+        return '<line x1="'+xx+'" y1="'+T+'" x2="'+xx+'" y2="'+(H-B)+'" stroke="#dce6df"/><line x1="'+L+'" y1="'+yy+'" x2="'+(W-R)+'" y2="'+yy+'" stroke="#dce6df"/><text x="'+xx+'" y="'+(H-19)+'" text-anchor="middle" font-size="10">'+(minX+(maxX-minX)*i/5).toFixed(1)+'</text><text x="'+(L-7)+'" y="'+(yy+4)+'" text-anchor="end" font-size="10">'+(maxY-(maxY-minY)*i/5).toFixed(3)+'</text>';
+      }).join('');
+      const dots=valid.map(p=>'<circle cx="'+x(p.w)+'" cy="'+y(p.dryDensity)+'" r="4.5" fill="#11644c"/>').join('');
+      const line=valid.map((p,i)=>(i?'L':'M')+x(p.w)+' '+y(p.dryDensity)).join(' ');
+      const peak=num(test.optimumWaterContent)!==null&&num(test.maxDryDensity)!==null?'<circle cx="'+x(test.optimumWaterContent)+'" cy="'+y(test.maxDryDensity)+'" r="6" fill="#b45309" stroke="#fff" stroke-width="2"/>':'';
+      chart='<div class="cs-chart"><svg viewBox="0 0 '+W+' '+H+'" aria-label="含水比と乾燥密度の測定点"><rect width="'+W+'" height="'+H+'" fill="white"/>'+lines+'<path d="'+line+'" fill="none" stroke="#11644c" stroke-width="2"/>'+dots+peak+'<text x="'+(W/2)+'" y="'+(H-3)+'" text-anchor="middle" font-size="12">含水比 w (%)</text><text x="15" y="'+(H/2)+'" text-anchor="middle" transform="rotate(-90 15 '+(H/2)+')" font-size="12">乾燥密度 ρd (g/cm³)</text></svg></div><p style="font-size:10px">● 測定点とその接続線　●（橙）採用最大値。補間曲線ではありません。</p>';
+    }
+    const conditions=[['試験方法',test.method],['試料調製',test.preparation],['ランマー質量 (kg)',fmt(test.rammerMass,1)],['落下高さ (cm)',fmt(test.dropHeight,1)],['突固め回数 (回/層)',test.blows],['層数',test.layers],['モールド内径 (cm)',fmt(test.moldDiameter,2)],['モールド高さ (cm)',fmt(test.moldHeight,2)],['モールド容量 (cm³)',fmt(test.moldVolume,1)],['モールド質量 (g)',fmt(test.moldMass,1)],['最大粒径 (mm)',fmt(test.maxParticle,1)]];
+    dialog.innerHTML='<div class="cs-actions"><button type="button" class="ghost" id="closeCompactionSheet">閉じる</button><button type="button" class="primary" id="printCompactionSheet">印刷・PDF保存</button></div><article class="cs-page"><h2>突固めによる土の締固め試験　データシート</h2><table><tbody><tr><th>工事件名</th><td colspan="3">'+esc(project.name||'—')+'</td></tr><tr><th>試料名</th><td>'+esc(test.sample||'—')+'</td><th>試験日</th><td>'+esc(test.testDate||'—')+'</td></tr></tbody></table><h3>試験条件</h3><table><tbody>'+conditions.map(([k,v])=>'<tr><th colspan="2">'+esc(k)+'</th><td colspan="2">'+esc(v??'—')+'</td></tr>').join('')+'</tbody></table><h3>測定データ</h3><table><thead><tr><th>測定No.</th><th>モールド＋試料 (g)</th><th>含水比 (%)</th><th>湿潤密度 (g/cm³)</th><th>乾燥密度 (g/cm³)</th></tr></thead><tbody>'+rows+'</tbody></table><h3>含水比容器データ</h3><table><thead><tr><th>測定</th><th>回</th><th>容器No.</th><th>ma (g)</th><th>mb (g)</th><th>mc (g)</th><th>w (%)</th></tr></thead><tbody>'+(waterRows||'<tr><td colspan="7">容器データの登録なし</td></tr>')+'</tbody></table><h3>締固め試験結果</h3><div class="cs-summary"><div>最大乾燥密度<strong>'+fmt(test.maxDryDensity,3)+' g/cm³</strong></div><div>最適含水比<strong>'+fmt(test.optimumWaterContent,1)+' %</strong></div><div>95% 乾燥密度<strong>'+fmt(test.dryDensity95,3)+' g/cm³</strong></div><div>90% 乾燥密度<strong>'+fmt(test.dryDensity90,3)+' g/cm³</strong></div></div><h3>締固め曲線（測定点）</h3>'+chart+'</article>';
+    dialog.querySelector('#closeCompactionSheet').addEventListener('click',()=>dialog.close());
+    dialog.querySelector('#printCompactionSheet').addEventListener('click',()=>window.print());
+    dialog.showModal();
+  }
+
+  function renderCard(t){return `<div class="card-title-row"><div><p class="test-kind">突固めによる土の締固め試験</p><h3>${esc(t.sample)}</h3><p>${new Date(t.createdAt).toLocaleString('ja-JP')}${t.updatedAt?' ｜ 訂正済み':''}</p></div><div style="display:flex;flex-direction:column;gap:6px"><button type="button" class="primary" data-sheet-compaction="${esc(t.id)}">📄 データシート</button><button type="button" class="edit-btn" data-edit-compaction="${esc(t.id)}">訂正</button></div></div><div class="fraction-card-row"><div><span>最大乾燥密度 ρdmax</span><strong>${num(t.maxDryDensity)?.toFixed(3)??'—'} g/cm³</strong></div><div><span>最適含水比 wopt</span><strong>${num(t.optimumWaterContent)?.toFixed(1)??'—'} %</strong></div><div><span>95% / 90%</span><strong>${num(t.dryDensity95)?.toFixed(3)??'—'} / ${num(t.dryDensity90)?.toFixed(3)??'—'}</strong></div></div><div class="meta"><span>方法 ${esc(t.method||'—')}</span><span>測定 ${(t.points||[]).filter(p=>Number.isFinite(Number(p.dryDensity))).length}点</span></div>`;}
 
   const baseRenderMoistureCard=renderMoistureCard;renderMoistureCard=function(test){if(test?.type===TYPE)return renderCard(test);return baseRenderMoistureCard(test);};
-  const baseRenderTests=renderTests;renderTests=function(){baseRenderTests();document.querySelectorAll('[data-edit-compaction]').forEach(b=>b.addEventListener('click',()=>openEdit(b.dataset.editCompaction)));};
+  const baseRenderTests=renderTests;renderTests=function(){baseRenderTests();document.querySelectorAll('[data-edit-compaction]').forEach(b=>b.addEventListener('click',()=>openEdit(b.dataset.editCompaction)));document.querySelectorAll('[data-sheet-compaction]').forEach(b=>b.addEventListener('click',()=>openCompactionSheet(b.dataset.sheetCompaction)));};
 
   injectUI();
 })();
