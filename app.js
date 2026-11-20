@@ -125,7 +125,7 @@ function renderMoistureCard(test) {
   const measurements = testMeasurements(test);
   const rows = measurements.map((m, index) => `
     <div class="measurement-row">
-      <strong>${measurements.length === 1 ? '測定' : `測定 ${index + 1}`}</strong>
+      <strong>測定 ${[1,2,3].includes(Number(m.measurementNo)) ? Number(m.measurementNo) : index + 1}</strong>
       <span>容器 ${escapeHtml(m.containerNo || '—')}</span>
       <span>${Number(m.moisture).toFixed(1)} %</span>
     </div>
