@@ -206,6 +206,7 @@ function readMeasurement(index) {
   if (![c, wet, dry].every(Number.isFinite) || drySoil <= 0 || water < 0) return null;
 
   return {
+    measurementNo: index,
     containerNo: moistureForm.elements[`containerNo${index}`].value.trim(),
     containerMass: c,
     wetMass: wet,
@@ -215,8 +216,18 @@ function readMeasurement(index) {
 }
 
 function getAllMeasurements() {
-  const measurements = [1,2,3].map(readMeasurement);
-  return measurements.every(Boolean) ? measurements : null;
+  // 空欄の測定は無視し、1〜3点の有効な測定だけを登録。
+  // 一部の数値だけ入力された測定は誤登録を防ぐため保存不可。
+  const measurements = [];
+  for (const index of [1,2,3]) {
+    const entered = ['containerNo','containerMass','wetMass','dryMass'].some(key =>
+      String(moistureForm.elements[`${key}${index}`]?.value ?? '').trim() !== '');
+    if (!entered) continue;
+    const measured = readMeasurement(index);
+    if (!measured) return null;
+    measurements.push(measured);
+  }
+  return measurements.length ? measurements : null;
 }
 
 function updateMoisturePreview() {
@@ -233,9 +244,9 @@ function updateMoisturePreview() {
   });
 
   const preview = document.getElementById('moisturePreview');
-  if (values.length === 3) {
-    const average = values.reduce((a,b) => a + b, 0) / 3;
-    preview.textContent = `平均含水比：${average.toFixed(1)} %`;
+  if (values.length >= 1) {
+    const average = values.reduce((a,b) => a + b, 0) / values.length;
+    preview.textContent = `平均含水比：${average.toFixed(1)} %（${values.length}測定）`;
   } else {
     preview.textContent = '平均含水比：—';
   }
@@ -262,7 +273,7 @@ function openEditMoisture(testId) {
 
   const measurements = testMeasurements(test);
   measurements.slice(0, 3).forEach((m, i) => {
-    const index = i + 1;
+    const index = [1,2,3].includes(Number(m.measurementNo)) ? Number(m.measurementNo) : i + 1;
     moistureForm.elements[`containerNo${index}`].value = m.containerNo || '';
     moistureForm.elements[`containerMass${index}`].value = m.containerMass ?? '';
     moistureForm.elements[`wetMass${index}`].value = m.wetMass ?? '';
@@ -519,7 +530,7 @@ moistureForm.addEventListener('submit', e => {
   e.preventDefault();
   const measurements = getAllMeasurements();
   if (!measurements) {
-    alert('3測定すべての質量を確認してください。各測定で「湿潤質量 ≥ 乾燥質量 > 容器質量」になるよう入力してください。');
+    alert('1測定以上の質量をそろえてください。入力した各測定は「湿潤質量 ≥ 乾燥質量 > 容器質量」が必要です。未使用の測定欄は空欄で構いません。');
     return;
   }
 
@@ -531,13 +542,16 @@ moistureForm.addEventListener('submit', e => {
   const average = measurements.reduce((sum, m) => sum + m.moisture, 0) / measurements.length;
   const now = new Date().toISOString();
 
-  if (state.editingTestId) {
-    const test = p.tests.find(t => t.id === state.editingTestId);
-    if (!test) return;
+  const resumeId = state.editingTestId || moistureForm.dataset.draftTestId || '';
+  const existing = p.tests.find(t => t.id === resumeId && t.type === 'moisture');
+  if (existing) {
+    const test = existing;
     test.sample = sample;
     test.measurements = measurements;
     test.moistureAverage = average;
     test.updatedAt = now;
+    // 途中保存から通常保存に移行。入力済みの試験日や測定値を維持する。
+    for (const key of ['draft','draftFields','draftFieldLabels','draftSavedAt','draftExtra']) delete test[key];
     delete test.containerNo;
     delete test.containerMass;
     delete test.wetMass;
