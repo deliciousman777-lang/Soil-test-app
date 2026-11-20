@@ -92,31 +92,31 @@
           <div class="specimen-head"><strong>測定 1</strong><span id="moisture1">— %</span></div>
           <label>容器番号<input name="containerNo1" autocomplete="off" placeholder="例：A-12" /></label>
           <div class="measurement-grid">
-            <label>容器＋湿潤試料 (g)<div class="voice-input"><input name="wetMass1" inputmode="decimal" required placeholder="0.00" /><button type="button" class="mic" data-voice="wetMass1" data-form="moistureForm">🎤</button></div></label>
-            <label>容器＋乾燥試料 (g)<div class="voice-input"><input name="dryMass1" inputmode="decimal" required placeholder="0.00" /><button type="button" class="mic" data-voice="dryMass1" data-form="moistureForm">🎤</button></div></label>
-            <label>容器質量 (g)<div class="voice-input"><input name="containerMass1" inputmode="decimal" required placeholder="0.00" /><button type="button" class="mic" data-voice="containerMass1" data-form="moistureForm">🎤</button></div></label>
+            <label>容器＋湿潤試料 (g)<div class="voice-input"><input name="wetMass1" inputmode="decimal" placeholder="0.00" /><button type="button" class="mic" data-voice="wetMass1" data-form="moistureForm">🎤</button></div></label>
+            <label>容器＋乾燥試料 (g)<div class="voice-input"><input name="dryMass1" inputmode="decimal" placeholder="0.00" /><button type="button" class="mic" data-voice="dryMass1" data-form="moistureForm">🎤</button></div></label>
+            <label>容器質量 (g)<div class="voice-input"><input name="containerMass1" inputmode="decimal" placeholder="0.00" /><button type="button" class="mic" data-voice="containerMass1" data-form="moistureForm">🎤</button></div></label>
           </div>
         </section>
         <section class="specimen-card">
           <div class="specimen-head"><strong>測定 2</strong><span id="moisture2">— %</span></div>
           <label>容器番号<input name="containerNo2" autocomplete="off" placeholder="例：A-13" /></label>
           <div class="measurement-grid">
-            <label>容器＋湿潤試料 (g)<div class="voice-input"><input name="wetMass2" inputmode="decimal" required placeholder="0.00" /><button type="button" class="mic" data-voice="wetMass2" data-form="moistureForm">🎤</button></div></label>
-            <label>容器＋乾燥試料 (g)<div class="voice-input"><input name="dryMass2" inputmode="decimal" required placeholder="0.00" /><button type="button" class="mic" data-voice="dryMass2" data-form="moistureForm">🎤</button></div></label>
-            <label>容器質量 (g)<div class="voice-input"><input name="containerMass2" inputmode="decimal" required placeholder="0.00" /><button type="button" class="mic" data-voice="containerMass2" data-form="moistureForm">🎤</button></div></label>
+            <label>容器＋湿潤試料 (g)<div class="voice-input"><input name="wetMass2" inputmode="decimal" placeholder="0.00" /><button type="button" class="mic" data-voice="wetMass2" data-form="moistureForm">🎤</button></div></label>
+            <label>容器＋乾燥試料 (g)<div class="voice-input"><input name="dryMass2" inputmode="decimal" placeholder="0.00" /><button type="button" class="mic" data-voice="dryMass2" data-form="moistureForm">🎤</button></div></label>
+            <label>容器質量 (g)<div class="voice-input"><input name="containerMass2" inputmode="decimal" placeholder="0.00" /><button type="button" class="mic" data-voice="containerMass2" data-form="moistureForm">🎤</button></div></label>
           </div>
         </section>
         <section class="specimen-card">
           <div class="specimen-head"><strong>測定 3</strong><span id="moisture3">— %</span></div>
           <label>容器番号<input name="containerNo3" autocomplete="off" placeholder="例：A-14" /></label>
           <div class="measurement-grid">
-            <label>容器＋湿潤試料 (g)<div class="voice-input"><input name="wetMass3" inputmode="decimal" required placeholder="0.00" /><button type="button" class="mic" data-voice="wetMass3" data-form="moistureForm">🎤</button></div></label>
-            <label>容器＋乾燥試料 (g)<div class="voice-input"><input name="dryMass3" inputmode="decimal" required placeholder="0.00" /><button type="button" class="mic" data-voice="dryMass3" data-form="moistureForm">🎤</button></div></label>
-            <label>容器質量 (g)<div class="voice-input"><input name="containerMass3" inputmode="decimal" required placeholder="0.00" /><button type="button" class="mic" data-voice="containerMass3" data-form="moistureForm">🎤</button></div></label>
+            <label>容器＋湿潤試料 (g)<div class="voice-input"><input name="wetMass3" inputmode="decimal" placeholder="0.00" /><button type="button" class="mic" data-voice="wetMass3" data-form="moistureForm">🎤</button></div></label>
+            <label>容器＋乾燥試料 (g)<div class="voice-input"><input name="dryMass3" inputmode="decimal" placeholder="0.00" /><button type="button" class="mic" data-voice="dryMass3" data-form="moistureForm">🎤</button></div></label>
+            <label>容器質量 (g)<div class="voice-input"><input name="containerMass3" inputmode="decimal" placeholder="0.00" /><button type="button" class="mic" data-voice="containerMass3" data-form="moistureForm">🎤</button></div></label>
           </div>
         </section>
       </div>
-      <div id="moisturePreview" class="result-box">平均含水比：—</div><p class="hint">3測定の含水比を自動計算し、その平均値を表示します。</p>
+      <div id="moisturePreview" class="result-box">平均含水比：—</div><p class="hint">測定は1〜3点で保存できます。未使用の欄は空白のままでOK。入力済みの測定だけで平均含水比を計算します。</p>
       <div class="dialog-actions"><button type="button" class="ghost" data-close="moistureDialog">キャンセル</button><button id="moistureSubmitBtn" class="primary" value="default">保存</button></div>
     </form>
   </dialog>
