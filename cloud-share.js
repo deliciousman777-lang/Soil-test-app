@@ -128,7 +128,14 @@
   function mergeProjects(a,b){
     if(!a)return clone(b);
     if(!b)return clone(a);
-    const base = clone(projectStamp(a) >= projectStamp(b) ? a : b);
+    const primary = projectStamp(a) >= projectStamp(b) ? a : b;
+    const secondary = primary === a ? b : a;
+    const base = clone(primary);
+    // 古い端末に plannedTests が存在しない場合だけ、他端末の選択を引き継ぐ。
+    // [] は明示的に全解除した状態なので上書きしない。
+    if(!Array.isArray(base.plannedTests) && Array.isArray(secondary.plannedTests)){
+      base.plannedTests=clone(secondary.plannedTests);
+    }
     // 削除履歴を両端末から統合する。新しい端末の保存で古い削除情報を消さない。
     const deletedTestIds={};
     for(const source of [a?.deletedTestIds,b?.deletedTestIds]){
