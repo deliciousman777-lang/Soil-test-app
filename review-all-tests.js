@@ -31,7 +31,7 @@
   }
 
   function moistureHtml(test){
-    const rows=(Array.isArray(test.measurements)?test.measurements:[]).map((m,i)=>`<tr><th>測定 ${i+1}</th><td>${esc(m.containerNo||'—')}</td><td>${num(m.wetMass)} g</td><td>${num(m.dryMass)} g</td><td>${num(m.containerMass)} g</td><td><strong>${num(m.moisture,1)} %</strong></td></tr>`).join('');
+    const rows=(Array.isArray(test.measurements)?test.measurements:[]).map((m,i)=>`<tr><th>測定 ${[1,2,3].includes(Number(m.measurementNo))?Number(m.measurementNo):i+1}</th><td>${esc(m.containerNo||'—')}</td><td>${num(m.wetMass)} g</td><td>${num(m.dryMass)} g</td><td>${num(m.containerMass)} g</td><td><strong>${num(m.moisture,1)} %</strong></td></tr>`).join('');
     const avg=finite(test.moistureAverage)?Number(test.moistureAverage):(Array.isArray(test.measurements)&&test.measurements.length?test.measurements.reduce((s,m)=>s+(Number(m.moisture)||0),0)/test.measurements.length:null);
     return `${meta(test)}<div class="review-summary"><div><span>平均含水比</span><strong>${finite(avg)?Number(avg).toFixed(1):'—'} %</strong></div><div><span>測定数</span><strong>${test.measurements?.length||0}</strong></div><div><span>状態</span><strong>${test.updatedAt?'訂正済':'保存済'}</strong></div></div><section class="review-section"><h3>測定値</h3><div class="table-wrap"><table class="review-table"><thead><tr><th>測定</th><th>容器番号</th><th>容器＋湿潤試料</th><th>容器＋乾燥試料</th><th>容器質量</th><th>含水比</th></tr></thead><tbody>${rows||'<tr><td colspan="6">測定値がありません</td></tr>'}</tbody></table></div></section>${note()}`;
   }
