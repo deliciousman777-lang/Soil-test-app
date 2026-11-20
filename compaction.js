@@ -276,7 +276,7 @@
 
   // JIS A 1210 / JGS 0711 measurement worksheet, matching the supplied paper form.
   // Measurements 1-4 and 5-8 retain their original positions, even when a point is blank.
-  function openCompactionSheet(id){
+  function openCompactionSheet(id,embedded=false){
     const project=currentProject();
     const test=project?.tests?.find(t=>String(t.id)===String(id)&&t.type===TYPE);
     if(!test)return;
@@ -369,13 +369,72 @@
       +'<div class="cs-foot"><div><p>最大乾燥密度 ρdmax：'+esc(format(test.maxDryDensity,3))+' g/cm³</p><p>最適含水比 wopt：'+esc(format(test.optimumWaterContent,1))+' %</p></div><div><p>※ モールドの質量は底板を含む。</p><p>ρd = ρt / (1 + w / 100)</p></div></div></article>';
     dialog.querySelector('#closeCompactionSheet').addEventListener('click',()=>dialog.close());
     dialog.querySelector('#printCompactionSheet').addEventListener('click',()=>window.print());
+    if(embedded)return dialog.querySelector('.cs-page')?.outerHTML||'';
     dialog.showModal();
   }
 
   function renderCard(t){return `<div class="card-title-row"><div><p class="test-kind">突固めによる土の締固め試験</p><h3>${esc(t.sample)}</h3><p>${new Date(t.createdAt).toLocaleString('ja-JP')}${t.updatedAt?' ｜ 訂正済み':''}</p></div><div style="display:flex;flex-direction:column;gap:6px"><button type="button" class="primary" data-sheet-compaction="${esc(t.id)}">📄 データシート</button><button type="button" class="edit-btn" data-edit-compaction="${esc(t.id)}">訂正</button></div></div><div class="fraction-card-row"><div><span>最大乾燥密度 ρdmax</span><strong>${num(t.maxDryDensity)?.toFixed(3)??'—'} g/cm³</strong></div><div><span>最適含水比 wopt</span><strong>${num(t.optimumWaterContent)?.toFixed(1)??'—'} %</strong></div><div><span>95% / 90%</span><strong>${num(t.dryDensity95)?.toFixed(3)??'—'} / ${num(t.dryDensity90)?.toFixed(3)??'—'}</strong></div></div><div class="meta"><span>方法 ${esc(t.method||'—')}</span><span>測定 ${(t.points||[]).filter(p=>Number.isFinite(Number(p.dryDensity))).length}点</span></div>`;}
 
   const baseRenderMoistureCard=renderMoistureCard;renderMoistureCard=function(test){if(test?.type===TYPE)return renderCard(test);return baseRenderMoistureCard(test);};
-  const baseRenderTests=renderTests;renderTests=function(){baseRenderTests();document.querySelectorAll('[data-edit-compaction]').forEach(b=>b.addEventListener('click',()=>openEdit(b.dataset.editCompaction)));document.querySelectorAll('[data-sheet-compaction]').forEach(b=>b.addEventListener('click',()=>openCompactionSheet(b.dataset.sheetCompaction)));};
+  const baseRenderTests=renderTests;renderTests=function(){baseRenderTests();document.querySelectorAll('[data-edit-compaction]').forEach(b=>b.addEventListener('click',()=>openEdit(b.dataset.editCompaction)));document.querySelectorAll('[data-sheet-compaction]').forEach(b=>b.addEventListener('click',()=>{const t=currentProject()?.tests?.find(x=>String(x.id)===String(b.dataset.sheetCompaction));document.getElementById('openReportBtn')?.click();const sel=document.getElementById('reportSampleSelect');if(sel&&t){sel.value=t.sample;sel.dispatchEvent(new Event('change',{bubbles:true}));}}));};
+
+
+  function appendCompactionReport(root){
+    if(!root||root.querySelector('[data-compaction-report]'))return;
+    const project=currentProject();
+    const sample=document.getElementById('reportSampleSelect')?.value||'';
+    const test=(project?.tests||[]).filter(t=>t.type===TYPE&&String(t.sample||'')===String(sample))
+      .sort((a,b)=>String(b.updatedAt||b.createdAt||'').localeCompare(String(a.updatedAt||a.createdAt||'')))[0];
+    if(!test)return;
+    const html=openCompactionSheet(test.id,true);
+    if(!html)return;
+    const page=document.createElement('section');
+    page.className='report-page compaction-report-page';
+    page.dataset.compactionReport=String(test.id);
+    page.innerHTML=html;
+    root.appendChild(page);
+  }
+  function setupCompactionReport(){
+    const pages=document.getElementById('reportPages');
+    if(!pages)return;
+    const style=document.createElement('style');
+    style.textContent=[
+      '.compaction-report-page{min-height:297mm!important;padding:9mm!important}',
+      '.compaction-report-page .cs-page{width:100%;padding:0!important;min-width:0!important}',
+      '.compaction-report-page .cs-head{grid-template-columns:105px 1fr!important;min-height:30px!important}',
+      '.compaction-report-page .cs-head h2{font-size:15px!important;letter-spacing:0!important}',
+      '.compaction-report-page .cs-head div{font-size:10px!important;letter-spacing:0!important}',
+      '.compaction-report-page table{font-size:9px!important}',
+      '.compaction-report-page th,.compaction-report-page td{height:17px!important;padding:2px 3px!important}',
+      '.compaction-report-page .cs-measures th:first-child{width:125px!important}',
+      '.compaction-report-page .cs-info{margin:5px 0!important}',
+      '.compaction-report-page .cs-measures{margin-top:5px!important}',
+      '.compaction-report-page .cs-notes{margin-top:5px!important;min-height:25px!important}',
+      '.compaction-report-page .cs-foot{font-size:9px!important}',
+      '@media(max-width:900px){.compaction-report-page{width:210mm!important;max-width:210mm!important;min-height:297mm!important;overflow:hidden!important;margin:0 auto!important}}',
+      '@media print{.compaction-report-page{width:210mm!important;min-height:297mm!important;padding:9mm!important;break-inside:avoid!important}}'
+    ].join('');
+    document.head.appendChild(style);
+    let pending=false;
+    const observer=new MutationObserver(()=>{
+      if(pending)return;
+      pending=true;
+      queueMicrotask(()=>{pending=false;appendCompactionReport(pages);});
+    });
+    observer.observe(pages,{childList:true,subtree:false});
+    appendCompactionReport(pages);
+    const originalPrint=window.print.bind(window);
+    window.print=function(){
+      const printRoot=document.getElementById('soilnotePrintRoot');
+      if(printRoot&&document.body.classList.contains('soilnote-printing')){
+        const page=pages.querySelector('.compaction-report-page');
+        if(page&&!printRoot.querySelector('.compaction-report-page'))printRoot.appendChild(page.cloneNode(true));
+      }
+      return originalPrint();
+    };
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(setupCompactionReport,800));
+  else setTimeout(setupCompactionReport,800);
 
   injectUI();
 })();
