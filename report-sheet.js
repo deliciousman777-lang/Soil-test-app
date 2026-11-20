@@ -25,7 +25,16 @@
 
   function moistureRows(test){
     const arr=Array.isArray(test?.measurements)?test.measurements:[];
-    return [0,1,2].map(i=>{const m=arr[i]||{};return {no:m.containerNo||'',ma:m.wetMass,mb:m.dryMass,mc:m.containerMass,w:m.moisture};});
+    // 測定2や3だけを使用した場合も、データシートの元の列位置を保持する。
+    const slots=[null,null,null];
+    arr.forEach((m,i)=>{
+      const slot=Number(m?.measurementNo);
+      const index=Number.isInteger(slot)&&slot>=1&&slot<=3?slot-1:i;
+      if(index>=0&&index<3)slots[index]=m;
+    });
+    return slots.map(m=>({
+      no:m?.containerNo||'',ma:m?.wetMass,mb:m?.dryMass,mc:m?.containerMass,w:m?.moisture
+    }));
   }
 
   function pdRows(test){
