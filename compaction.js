@@ -273,7 +273,9 @@
     p.updatedAt=now;saveData();dialogEl().close();resetForm();renderTests();
   }
 
-  // Saved compaction tests have their own printable data sheet (not the generic soil sheet).
+
+  // JIS A 1210 / JGS 0711 measurement worksheet, matching the supplied paper form.
+  // Measurements 1-4 and 5-8 retain their original positions, even when a point is blank.
   function openCompactionSheet(id){
     const project=currentProject();
     const test=project?.tests?.find(t=>String(t.id)===String(id)&&t.type===TYPE);
@@ -282,55 +284,89 @@
     if(!dialog){
       dialog=document.createElement('dialog');
       dialog.id='compactionSheetDialog';
-      dialog.className='wide-dialog';
       document.body.appendChild(dialog);
       const style=document.createElement('style');
-      style.textContent=`
-        #compactionSheetDialog{width:min(980px,96vw);max-height:92vh;padding:16px;border:0;border-radius:14px;overflow:auto}
-        .cs-actions{display:flex;gap:10px;justify-content:flex-end;margin-bottom:12px}
-        .cs-page{background:#fff;color:#202c27;padding:24px;font-family:Arial,"Noto Sans JP",sans-serif}
-        .cs-page h2{text-align:center;font-size:20px;margin:0 0 16px}
-        .cs-page h3{font-size:14px;margin:16px 0 6px}
-        .cs-page table{width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed}
-        .cs-page th,.cs-page td{border:1px solid #69756f;padding:6px 4px;text-align:center;overflow-wrap:anywhere}
-        .cs-page th{background:#f0f4f2}
-        .cs-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:12px 0}
-        .cs-summary div{border:1px solid #8b9d94;padding:9px;text-align:center;font-size:12px}
-        .cs-summary strong{display:block;font-size:17px;margin-top:5px}
-        .cs-chart{margin-top:10px;border:1px solid #bdc8c1}
-        .cs-chart svg{display:block;width:100%;height:auto}
-        @media(max-width:600px){.cs-page{padding:8px}.cs-page table{font-size:9px}.cs-page th,.cs-page td{padding:4px 2px}.cs-summary{grid-template-columns:1fr 1fr}.cs-summary strong{font-size:15px}}
-        @media print{body>*:not(#compactionSheetDialog){display:none!important}#compactionSheetDialog{position:static!important;display:block!important;width:100%!important;max-height:none!important;overflow:visible!important;padding:0!important;border:0!important}#compactionSheetDialog::backdrop{display:none!important}.cs-actions{display:none!important}.cs-page{padding:0!important}.cs-page table{font-size:10px}.cs-chart{break-inside:avoid}@page{size:A4 portrait;margin:12mm}}
-      `;
+      style.id='compactionSheetPrintStyles';
+      style.textContent=[
+        '#compactionSheetDialog{width:min(1050px,98vw);max-width:1050px;max-height:95vh;padding:12px;border:0;border-radius:12px;overflow:auto}',
+        '#compactionSheetDialog .cs-actions{display:flex;justify-content:flex-end;gap:8px;margin-bottom:12px}',
+        '#compactionSheetDialog .cs-page{background:white;color:#111;font-family:"Noto Sans JP",serif;padding:12px 18px;box-sizing:border-box}',
+        '#compactionSheetDialog .cs-head{display:grid;grid-template-columns:145px 1fr;border-top:2px solid #222;border-bottom:2px solid #222;align-items:center;min-height:43px}',
+        '#compactionSheetDialog .cs-head div{font-size:11px;letter-spacing:2px;padding-left:8px}',
+        '#compactionSheetDialog .cs-head h2{font-size:19px;font-weight:500;letter-spacing:2px;text-align:center;margin:0;padding:4px}',
+        '#compactionSheetDialog table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:11px}',
+        '#compactionSheetDialog th,#compactionSheetDialog td{border:1px solid #777;padding:3px 4px;height:20px;text-align:center;font-weight:400;overflow-wrap:anywhere}',
+        '#compactionSheetDialog th{background:#f8f8f8}',
+        '#compactionSheetDialog .cs-info{margin:10px 0 5px}',
+        '#compactionSheetDialog .cs-info td{text-align:left}',
+        '#compactionSheetDialog .cs-measures{margin-top:7px}',
+        '#compactionSheetDialog .cs-measures th:first-child{width:145px;text-align:left}',
+        '#compactionSheetDialog .cs-measures td{width:calc((100% - 145px)/4)}',
+        '#compactionSheetDialog .cs-measures .cs-section td,#compactionSheetDialog .cs-measures .cs-section th{border-top:2px solid #333}',
+        '#compactionSheetDialog .cs-measures .cs-water th{padding-left:16px}',
+        '#compactionSheetDialog .cs-notes{margin-top:9px;font-size:11px;min-height:34px;border-bottom:1px solid #888}',
+        '#compactionSheetDialog .cs-foot{display:flex;justify-content:space-between;gap:15px;font-size:10px;margin-top:8px}',
+        '#compactionSheetDialog .cs-foot p{margin:3px 0}',
+        '#compactionSheetDialog .cs-blank{color:#888}',
+        '@media(max-width:600px){#compactionSheetDialog .cs-page{min-width:690px;padding:10px}#compactionSheetDialog{overflow:auto}}',
+        '@media print{@page{size:A4 portrait;margin:9mm}body>*:not(#compactionSheetDialog){display:none!important}#compactionSheetDialog{display:block!important;position:static!important;width:100%!important;max-width:none!important;max-height:none!important;overflow:visible!important;padding:0!important;margin:0!important;border:0!important;border-radius:0!important}#compactionSheetDialog::backdrop{display:none!important}#compactionSheetDialog .cs-actions{display:none!important}#compactionSheetDialog .cs-page{width:100%!important;min-width:0!important;padding:0!important}#compactionSheetDialog table{font-size:9px}#compactionSheetDialog th,#compactionSheetDialog td{height:18px;padding:2px 3px}#compactionSheetDialog .cs-head h2{font-size:16px}#compactionSheetDialog .cs-measures th:first-child{width:115px}}'
+      ].join('');
       document.head.appendChild(style);
     }
-    const fmt=(value,d=2)=>num(value)===null?'—':num(value).toFixed(d);
-    const cells=(arr)=>arr.map(v=>'<td>'+esc(v)+'</td>').join('');
-    const points=(test.points||[]).slice().sort((a,b)=>(a.index||0)-(b.index||0));
-    const rows=points.map(p=>'<tr>'+cells([p.index??'—',fmt(p.moldSoilMass,1),fmt(p.w,2),fmt(p.wetDensity,3),fmt(p.dryDensity,3)])+'</tr>').join('');
-    const waterRows=points.flatMap(p=>(p.waters||[]).map((w,j)=>'<tr>'+cells([p.index??'—',j+1,w.containerNo||'—',fmt(w.ma,2),fmt(w.mb,2),fmt(w.mc,2),fmt(w.w,2)])+'</tr>')).join('');
-    const valid=points.filter(p=>num(p.w)!==null&&num(p.dryDensity)!==null).sort((a,b)=>a.w-b.w);
-    let chart='<p>有効な測定点がありません。</p>';
-    if(valid.length){
-      const all=valid.concat(num(test.optimumWaterContent)!==null&&num(test.maxDryDensity)!==null?[{w:test.optimumWaterContent,dryDensity:test.maxDryDensity}]:[]);
-      let minX=Math.min(...all.map(p=>Number(p.w))),maxX=Math.max(...all.map(p=>Number(p.w)));
-      let minY=Math.min(...all.map(p=>Number(p.dryDensity))),maxY=Math.max(...all.map(p=>Number(p.dryDensity)));
-      const dx=Math.max(1,(maxX-minX)*.15),dy=Math.max(.02,(maxY-minY)*.2);
-      minX-=dx;maxX+=dx;minY-=dy;maxY+=dy;
-      const W=720,H=330,L=62,T=18,R=20,B=42;
-      const x=v=>L+(Number(v)-minX)/(maxX-minX)*(W-L-R);
-      const y=v=>T+(maxY-Number(v))/(maxY-minY)*(H-T-B);
-      const lines=Array.from({length:6},(_,i)=>{
-        const xx=L+i*(W-L-R)/5,yy=T+i*(H-T-B)/5;
-        return '<line x1="'+xx+'" y1="'+T+'" x2="'+xx+'" y2="'+(H-B)+'" stroke="#dce6df"/><line x1="'+L+'" y1="'+yy+'" x2="'+(W-R)+'" y2="'+yy+'" stroke="#dce6df"/><text x="'+xx+'" y="'+(H-19)+'" text-anchor="middle" font-size="10">'+(minX+(maxX-minX)*i/5).toFixed(1)+'</text><text x="'+(L-7)+'" y="'+(yy+4)+'" text-anchor="end" font-size="10">'+(maxY-(maxY-minY)*i/5).toFixed(3)+'</text>';
-      }).join('');
-      const dots=valid.map(p=>'<circle cx="'+x(p.w)+'" cy="'+y(p.dryDensity)+'" r="4.5" fill="#11644c"/>').join('');
-      const line=valid.map((p,i)=>(i?'L':'M')+x(p.w)+' '+y(p.dryDensity)).join(' ');
-      const peak=num(test.optimumWaterContent)!==null&&num(test.maxDryDensity)!==null?'<circle cx="'+x(test.optimumWaterContent)+'" cy="'+y(test.maxDryDensity)+'" r="6" fill="#b45309" stroke="#fff" stroke-width="2"/>':'';
-      chart='<div class="cs-chart"><svg viewBox="0 0 '+W+' '+H+'" aria-label="含水比と乾燥密度の測定点"><rect width="'+W+'" height="'+H+'" fill="white"/>'+lines+'<path d="'+line+'" fill="none" stroke="#11644c" stroke-width="2"/>'+dots+peak+'<text x="'+(W/2)+'" y="'+(H-3)+'" text-anchor="middle" font-size="12">含水比 w (%)</text><text x="15" y="'+(H/2)+'" text-anchor="middle" transform="rotate(-90 15 '+(H/2)+')" font-size="12">乾燥密度 ρd (g/cm³)</text></svg></div><p style="font-size:10px">● 測定点とその接続線　●（橙）採用最大値。補間曲線ではありません。</p>';
-    }
-    const conditions=[['試験方法',test.method],['試料調製',test.preparation],['ランマー質量 (kg)',fmt(test.rammerMass,1)],['落下高さ (cm)',fmt(test.dropHeight,1)],['突固め回数 (回/層)',test.blows],['層数',test.layers],['モールド内径 (cm)',fmt(test.moldDiameter,2)],['モールド高さ (cm)',fmt(test.moldHeight,2)],['モールド容量 (cm³)',fmt(test.moldVolume,1)],['モールド質量 (g)',fmt(test.moldMass,1)],['最大粒径 (mm)',fmt(test.maxParticle,1)]];
-    dialog.innerHTML='<div class="cs-actions"><button type="button" class="ghost" id="closeCompactionSheet">閉じる</button><button type="button" class="primary" id="printCompactionSheet">印刷・PDF保存</button></div><article class="cs-page"><h2>突固めによる土の締固め試験　データシート</h2><table><tbody><tr><th>工事件名</th><td colspan="3">'+esc(project.name||'—')+'</td></tr><tr><th>試料名</th><td>'+esc(test.sample||'—')+'</td><th>試験日</th><td>'+esc(test.testDate||'—')+'</td></tr></tbody></table><h3>試験条件</h3><table><tbody>'+conditions.map(([k,v])=>'<tr><th colspan="2">'+esc(k)+'</th><td colspan="2">'+esc(v??'—')+'</td></tr>').join('')+'</tbody></table><h3>測定データ</h3><table><thead><tr><th>測定No.</th><th>モールド＋試料 (g)</th><th>含水比 (%)</th><th>湿潤密度 (g/cm³)</th><th>乾燥密度 (g/cm³)</th></tr></thead><tbody>'+rows+'</tbody></table><h3>含水比容器データ</h3><table><thead><tr><th>測定</th><th>回</th><th>容器No.</th><th>ma (g)</th><th>mb (g)</th><th>mc (g)</th><th>w (%)</th></tr></thead><tbody>'+(waterRows||'<tr><td colspan="7">容器データの登録なし</td></tr>')+'</tbody></table><h3>締固め試験結果</h3><div class="cs-summary"><div>最大乾燥密度<strong>'+fmt(test.maxDryDensity,3)+' g/cm³</strong></div><div>最適含水比<strong>'+fmt(test.optimumWaterContent,1)+' %</strong></div><div>95% 乾燥密度<strong>'+fmt(test.dryDensity95,3)+' g/cm³</strong></div><div>90% 乾燥密度<strong>'+fmt(test.dryDensity90,3)+' g/cm³</strong></div></div><h3>締固め曲線（測定点）</h3>'+chart+'</article>';
+    const format=(v,d=2)=>v===null||v===undefined||String(v).trim()===''||!Number.isFinite(Number(v))?'':Number(v).toFixed(d);
+    const cell=v=>'<td>'+esc(v===null||v===undefined?'':v)+'</td>';
+    const row=(label,values,cls='')=>'<tr class="'+cls+'"><th>'+esc(label)+'</th>'+values.map(cell).join('')+'</tr>';
+    const points=new Map((test.points||[]).map((p,i)=>[Number(p.index)||i+1,p]));
+    const group=(start)=>{
+      const arr=Array.from({length:4},(_,i)=>points.get(start+i)||{});
+      const values=fn=>arr.map(fn);
+      const water=(n,field)=>values(p=>{
+        const w=(p.waters||[])[n];
+        if(!w)return '';
+        return field==='containerNo'?w.containerNo||'':format(w[field],field==='w'?2:2);
+      });
+      return [
+        row('測定 No.',Array.from({length:4},(_,i)=>start+i),'cs-section'),
+        row('(試料＋モールド)質量 m₂ (g)',values(p=>format(p.moldSoilMass,1))),
+        row('湿潤密度 ρt (g/cm³)',values(p=>format(p.wetDensity,3))),
+        row('平均含水比 w (%)',values(p=>format(p.w,2))),
+        row('乾燥密度 ρd (g/cm³)',values(p=>format(p.dryDensity,3))),
+        row('含水比① 容器 No.',water(0,'containerNo'),'cs-water'),
+        row('ma (g)',water(0,'ma'),'cs-water'),
+        row('mb (g)',water(0,'mb'),'cs-water'),
+        row('mc (g)',water(0,'mc'),'cs-water'),
+        row('w (%)',water(0,'w'),'cs-water'),
+        row('含水比② 容器 No.',water(1,'containerNo'),'cs-water'),
+        row('ma (g)',water(1,'ma'),'cs-water'),
+        row('mb (g)',water(1,'mb'),'cs-water'),
+        row('mc (g)',water(1,'mc'),'cs-water'),
+        row('w (%)',water(1,'w'),'cs-water')
+      ].join('');
+    };
+    const info=(label,value)=>'<th>'+esc(label)+'</th><td>'+esc(value??'')+'</td>';
+    const method=String(test.method||'');
+    const prep=String(test.preparation||'');
+    const preparationMethod=/湿潤/.test(prep)?'湿潤法':/乾燥/.test(prep)?'乾燥法':'';
+    const reuse=/非繰返し/.test(prep)?'非繰返し法':/繰返し/.test(prep)?'繰返し法':'';
+    const date=String(test.testDate||'');
+    const dateDisplay=/^\d{4}-\d{2}-\d{2}$/.test(date)?date.replace(/^(\d{4})-(\d{2})-(\d{2})$/,'$1 年 $2 月 $3 日'):'';
+    const extra=test.remarks||test.notes||'';
+    const conditions=[
+      ['試験方法',method,'土質名称',test.soilName||''],
+      ['試料の準備方法',preparationMethod,'ランマー質量 (kg)',format(test.rammerMass,1)],
+      ['試料の使用方法',reuse,'落下高さ (cm)',format(test.dropHeight,1)],
+      ['含水比 (自然状態) (%)',format(test.specimenPreparation?.naturalWater,2),'突固め回数 (回/層)',test.blows??''],
+      ['含水比 (乾燥処理後) (%)','','突固め層数 (層)',test.layers??''],
+      ['モールド内径 (cm)',format(test.moldDiameter,2),'モールド高さ (cm)',format(test.moldHeight,2)],
+      ['モールド容量 (cm³)',format(test.moldVolume,1),'モールド質量 m₁ (g)',format(test.moldMass,1)]
+    ];
+    dialog.innerHTML='<div class="cs-actions"><button type="button" class="ghost" id="closeCompactionSheet">閉じる</button><button type="button" class="primary" id="printCompactionSheet">印刷・PDF保存</button></div>'
+      +'<article class="cs-page"><div class="cs-head"><div>JIS A 1210<br>JGS 0711</div><h2>突固めによる土の締固め試験（測定）</h2></div>'
+      +'<table class="cs-info"><tbody><tr>'+info('調査件名',project.name||'')+info('試験年月日',dateDisplay)+'</tr><tr>'+info('試料番号（深さ）',test.sample||'')+info('試験者',test.examiner||'')+'</tr></tbody></table>'
+      +'<table><tbody>'+conditions.map(c=>'<tr>'+info(c[0],c[1])+info(c[2],c[3])+'</tr>').join('')+'</tbody></table>'
+      +'<table class="cs-measures"><tbody>'+group(1)+group(5)+'</tbody></table>'
+      +'<div class="cs-notes">特記事項　'+esc(extra)+'</div>'
+      +'<div class="cs-foot"><div><p>最大乾燥密度 ρdmax：'+esc(format(test.maxDryDensity,3))+' g/cm³</p><p>最適含水比 wopt：'+esc(format(test.optimumWaterContent,1))+' %</p></div><div><p>※ モールドの質量は底板を含む。</p><p>ρd = ρt / (1 + w / 100)</p></div></div></article>';
     dialog.querySelector('#closeCompactionSheet').addEventListener('click',()=>dialog.close());
     dialog.querySelector('#printCompactionSheet').addEventListener('click',()=>window.print());
     dialog.showModal();
