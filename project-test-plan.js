@@ -157,34 +157,14 @@
     holder.innerHTML=html;
   }
 
-  function persistPlan(project,keys){
-    if(!project) return;
-    const next=normalizePlan(keys);
-    const before=JSON.stringify(planFor(project));
-    const after=JSON.stringify(next);
-    if(before===after) return;
-    project.plannedTests=next;
-    project.updatedAt=new Date().toISOString();
-    saveData();
-  }
-
+  // Saving the selected test types is handled synchronously by app.js.
+  // Only mount the selectors here; asynchronous submit hooks could run
+  // before project creation and silently discard checked categories.
   function wireNewProjectForm(){
     const form=document.getElementById('projectForm');
     if(!form || form.dataset.projectPlanWired==='1') return;
     form.dataset.projectPlanWired='1';
     injectSelector(form,'new');
-    form.addEventListener('submit',()=>{
-      const selected=selectedFrom(form);
-      let beforeIds=new Set();
-      try{beforeIds=new Set((state?.data?.projects||[]).map(p=>String(p.id)));}catch{}
-      queueMicrotask(()=>{
-        let created=null;
-        try{created=(state?.data?.projects||[]).find(p=>!beforeIds.has(String(p.id)));}catch{}
-        if(!created) return;
-        persistPlan(created,selected);
-        try{renderProjects();renderDetailPlan();}catch{}
-      });
-    },true);
   }
 
   function wireEditProjectForm(){
@@ -192,18 +172,6 @@
     if(!form || form.dataset.projectPlanWired==='1') return;
     form.dataset.projectPlanWired='1';
     injectSelector(form,'edit');
-    form.addEventListener('submit',()=>{
-      const selected=selectedFrom(form);
-      let id='';
-      try{id=String(currentProject()?.id||'');}catch{}
-      queueMicrotask(()=>{
-        let project=null;
-        try{project=(state?.data?.projects||[]).find(p=>String(p.id)===id);}catch{}
-        if(!project) return;
-        persistPlan(project,selected);
-        try{renderProjects();renderDetailPlan();}catch{}
-      });
-    },true);
   }
 
   function fillEditPlan(){
