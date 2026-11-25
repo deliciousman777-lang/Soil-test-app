@@ -356,8 +356,8 @@
     dialog().showModal();
   }
 
-  function saveTest(e){
-    e.preventDefault();
+  function saveTest(e,partial=false){
+    e?.preventDefault();
     const f=form(),p=currentProject();if(!f||!p)return;
     const sample=f.elements.sample.value.trim();
     if(!sample){alert('試料を選択してください。');return;}
@@ -370,7 +370,7 @@
       const specimens=specimensFromSnapshot(entry.snapshot);
       for(const specimen of specimens){
         // 必要本数だけ保存。含水比の3質量が揃う前は計算せず、入力値は保持する。
-        if(!specimen.moisture.valid){
+        if(!partial&&!specimen.moisture.valid){
           alert(entry.dosage+' kg/m³：供試体'+specimen.no+'の含水比質量を確認してください。');return;
         }
       }
@@ -378,26 +378,28 @@
     }
     const sampleOption=f.elements.sample.selectedOptions[0],now=new Date().toISOString();
     if(sampleOption?.dataset?.sampleId)p.activeSampleId=sampleOption.dataset.sampleId;
-    let draftReused=false;
+    const usedDrafts=new Set();
     for(const entry of validated){
       const payload={sample,sampleId:sampleOption?.dataset?.sampleId||null,dosage:entry.dosage,
         improvementDate:entry.snapshot.fields.improvementDate||'',
         compressionDate:entry.snapshot.fields.compressionDate||'',specimens:entry.specimens};
       let existing=latestUnconfined(sample,entry.dosage);
-      if(!existing&&!draftReused&&draftOriginId){
-        existing=p.tests.find(t=>t.id===draftOriginId&&t.type===TYPE&&t.draft);
-        if(existing)draftReused=true;
+      if(!existing){
+        existing=p.tests.find(t=>t.type===TYPE&&t.draft&&!usedDrafts.has(t.id)&&String(t.sample||'')===sample&&(!payload.sampleId||!t.sampleId||String(t.sampleId)===String(payload.sampleId))&&levelKey(t.dosage)===levelKey(entry.dosage));
+      }
+      if(!existing&&draftOriginId&&!usedDrafts.has(draftOriginId)){
+        existing=p.tests.find(t=>t.id===draftOriginId&&t.type===TYPE&&t.draft&&n(t.dosage)===null&&String(t.sample||'')===sample);
       }
       if(existing){
-        Object.assign(existing,payload,{updatedAt:now});
+        if(existing.draft){
+          usedDrafts.add(existing.id);
+          existing.unconfinedRecoveryBackup={draftFields:existing.draftFields,draftExtra:existing.draftExtra,draftSavedAt:existing.draftSavedAt};
+        }
+        Object.assign(existing,payload,{testDate:payload.compressionDate||existing.testDate||'',updatedAt:now});
         ['draft','draftFields','draftFieldLabels','draftSavedAt','draftExtra'].forEach(k=>delete existing[k]);
-      }else p.tests.push({id:uid(),type:TYPE,...payload,createdAt:now});
+      }else p.tests.push({id:uid(),type:TYPE,...payload,testDate:payload.compressionDate,createdAt:now,updatedAt:now});
     }
-    // すべて既存の完成水準へ上書きした場合も、今回使用した途中保存だけを終了する。
-    if(draftOriginId&&!draftReused&&p.tests.some(t=>t.id===draftOriginId&&t.type===TYPE&&t.draft)){
-      p.deletedTestIds={...(p.deletedTestIds||{}),[draftOriginId]:now};
-      p.tests=p.tests.filter(t=>t.id!==draftOriginId);
-    }
+    // 旧ドラフトの未使用レコードは削除せず残す（復旧元の保全）。
     p.updatedAt=now;saveData();dialog().close();reset();renderTests();
   }
   function card(t){const strengths=[0,1,2].map(i=>n(t.specimens?.[i]?.maxStrength));const measured=strengths.filter(v=>v!==null);const avg=measured.length?measured.reduce((a,b)=>a+b,0)/measured.length:null;return `<div class="card-title-row"><div><p class="test-kind">一軸圧縮試験</p><h3>${esc(t.sample||'')} ｜ ${n(t.dosage)!==null?Number(t.dosage).toFixed(0):'—'} kg/m³</h3><p>${new Date(t.createdAt).toLocaleString('ja-JP')}${t.updatedAt?' ｜ 訂正済み':''}</p></div><button type="button" class="edit-btn" data-edit-unconfined="${esc(t.id)}">訂正</button></div><div class="fraction-card-row"><div><span>供試体1</span><strong>${strengths[0]!=null?strengths[0].toFixed(1):'—'} kN/m²</strong></div><div><span>供試体2</span><strong>${strengths[1]!=null?strengths[1].toFixed(1):'—'} kN/m²</strong></div><div><span>供試体3</span><strong>${strengths[2]!=null?strengths[2].toFixed(1):'—'} kN/m²</strong></div><div><span>平均</span><strong>${avg!==null?avg.toFixed(1):'—'} kN/m²</strong></div></div>`;}
@@ -420,6 +422,8 @@
       rows.sort((a,b)=>(n(a.test.dosage)??Infinity)-(n(b.test.dosage)??Infinity));
       const sample=String(rows[0].test.sample||'');
       const levels=doseChoices(sample);
+      const pending=(p.tests||[]).filter(t=>t.type===TYPE&&t.draft&&String(t.sample||'')===sample);
+      const recovered=pending.length?recoverDraftLevels(sample,null):new Map();
       if(levels.length<2)return;
       const bar=document.createElement('div');bar.className='unconfined-card-levels';
       const selections=levels.map(level=>{
@@ -428,7 +432,8 @@
         // 入力値なしの水準は実際の試験レコードを作らない。
         const card=document.createElement('article');
         card.className='card unconfined-empty-level-card';
-        card.innerHTML=`<div class="card-title-row"><div><p class="test-kind">一軸圧縮試験</p><h3>${esc(sample)} ｜ ${esc(level)} kg/m³</h3></div></div><div class="value" style="font-size:20px;color:#677770">未入力 <small>測定データはまだありません</small></div><button type="button" class="ghost unconfined-start-level">この水準を入力</button>`;
+        const snap=recovered.get(levelKey(level)),hasDraft=hasLevelData(snap);
+        card.innerHTML=`<div class="card-title-row"><div><p class="test-kind">一軸圧縮試験</p><h3>${esc(sample)} ｜ ${esc(level)} kg/m³</h3></div></div>${hasDraft?'<div class="value" style="font-size:20px;color:#9a6700">入力途中 <small>保存済みの測定値あり</small></div>':'<div class="value" style="font-size:20px;color:#677770">未入力 <small>測定データはまだありません</small></div>'}<button type="button" class="ghost unconfined-start-level">${hasDraft?'入力の続き':'この水準を入力'}</button>`;
         rows[rows.length-1].card.after(card);
         card.querySelector('.unconfined-start-level').addEventListener('click',()=>{
           const draft=(p.tests||[]).filter(t=>t.type===TYPE&&t.draft&&String(t.sample||'')===sample)
@@ -443,12 +448,12 @@
           openEdit(rows[0].test.id);
           switchLevel(level);
         });
-        return {card,test:null,level};
+        return {card,test:null,level,hasDraft};
       });
       const buttons=selections.map((row,i)=>{
         const b=document.createElement('button');b.type='button';
         b.textContent=Number(row.level).toLocaleString('ja-JP')+' kg/m³';
-        if(!row.test)b.title='未入力';
+        if(!row.test)b.title=row.hasDraft?'入力途中':'未入力';
         b.addEventListener('click',()=>show(i));bar.appendChild(b);return b;
       });
       function show(i){
@@ -525,6 +530,7 @@
   // 破壊スケッチはフォーム要素ではないので、途中保存時に線データも退避する。
 
   window.SoilNoteUnconfinedDraft={
+    savePartial:()=>saveTest(null,true),
     resolve:()=>{
       const f=form(),p=currentProject(),sample=f?.elements.sample.value||'';
       const sampleId=f?.elements.sample.selectedOptions[0]?.dataset.sampleId;

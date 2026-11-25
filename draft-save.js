@@ -139,11 +139,15 @@
     )));
     if(cfg.type==='mix-design')return [1,2,3].some(i=>pending(`naturalDryMass${i}`,
       `naturalWetMass${i}`,`naturalContainerMass${i}`,`naturalContainerNo${i}`));
-    if(cfg.type==='unconfined-compression')return [1,2,3].some(i=>pending(`mb${i}`,`ma${i}`,`mc${i}`,`containerNo${i}`));
+    // 一軸は水準別の実測レコードに未乾燥の含水比も保存できる。
+    if(cfg.type==='unconfined-compression')return false;
     return false;
   }
 
   function saveDraft(form,cfg){
+    if(cfg.type==='unconfined-compression'&&window.SoilNoteUnconfinedDraft?.savePartial){
+      window.SoilNoteUnconfinedDraft.savePartial();return;
+    }
     const p=project();if(!p)return;
     const {fields,labels}=serializeForm(form);
     const now=new Date().toISOString();
