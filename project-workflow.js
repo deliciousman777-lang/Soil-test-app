@@ -24,6 +24,17 @@
   let heartbeatTimer = null;
   let refreshTimer = null;
   let lastLocks = [];
+  let lockQueue = Promise.resolve();
+  let renewingLock = null;
+  let openingProject = false;
+  let navigationVersion = 0;
+  let refreshVersion = 0;
+  // Serialize acquire/renew/release so a renewal cannot recreate a released lock.
+  function queueLock(fn){
+    const next=lockQueue.then(fn,fn);
+    lockQueue=next.catch(()=>{});
+    return next;
+  }
   let selectedFolder = FOLDERS.some(x=>x.key===localStorage.getItem(FOLDER_KEY)) ? localStorage.getItem(FOLDER_KEY) : 'testing';
   let ensuringProjectId = '';
   const bypassCards = new WeakSet();
@@ -141,7 +152,7 @@
   }
 
   function projectLock(projectId){
-    return lastLocks.find(l=>String(l.project_id)===String(projectId)&&String(l.test_id)===PROJECT_LOCK_ID) || null;
+    return lastLocks.find(l=>String(l.project_id)===String(projectId)&&String(l.test_id)===PROJECT_LOCK_ID&&timeOf(l.expires_at)>Date.now()) || null;
   }
 
   function addBadge(card,className,text){
@@ -216,13 +227,13 @@
       return {acquired:false,cancelled:true};
     }
     try{
-      const {data,error}=await rpc('soilnote_lock_acquire',{
+      const {data,error}=await queueLock(()=>rpc('soilnote_lock_acquire',{
         p_code:code,
         p_project_id:String(projectId),
         p_test_id:PROJECT_LOCK_ID,
         p_device_id:deviceId(),
         p_display_name:name
-      });
+      }));
       if(error)throw error;
       const row=Array.isArray(data)?data[0]:data;
       return {acquired:!!row?.acquired,holderName:String(row?.holder_name||''),holderDeviceId:String(row?.holder_device_id||''),expiresAt:row?.expires_at};
@@ -235,17 +246,20 @@
 
   async function releaseProjectLock(lock=activeProjectLock){
     if(!lock)return;
-    if(activeProjectLock===lock)activeProjectLock=null;
-    stopHeartbeat();
-    const code=shareCode();
+    if(activeProjectLock===lock){
+      activeProjectLock=null;
+      stopHeartbeat();
+    }
+    const code=lock.code||shareCode();
     if(!code||!client)return;
     try{
-      await rpc('soilnote_lock_release',{
+      const {error}=await queueLock(()=>rpc('soilnote_lock_release',{
         p_code:code,
         p_project_id:String(lock.projectId),
         p_test_id:PROJECT_LOCK_ID,
         p_device_id:deviceId()
-      });
+      }));
+      if(error)throw error;
     }catch(err){console.warn('[SoilNote Project Lock] release',err);}
     refreshLocks();
   }
@@ -262,7 +276,17 @@
   async function renewActiveProjectLock(kickOnLoss=false){
     const lock=activeProjectLock;
     if(!lock)return true;
-    const result=await acquireProjectLock(lock.projectId,true);
+    if(String(currentProjectSafe()?.id||'')!==String(lock.projectId)){
+      await releaseProjectLock(lock);
+      return false;
+    }
+    if(renewingLock===lock)return true;
+    renewingLock=lock;
+    let result;
+    try{result=await acquireProjectLock(lock.projectId,true);}
+    finally{if(renewingLock===lock)renewingLock=null;}
+    // The user may have left while the request was in flight.
+    if(activeProjectLock!==lock)return false;
     if(result.acquired)return true;
     activeProjectLock=null;
     stopHeartbeat();
@@ -278,12 +302,17 @@
   async function refreshLocks(){
     const code=shareCode();
     if(!client||!code){lastLocks=[];decorateProjectCards();return;}
+    const version=++refreshVersion;
     try{
       const {data,error}=await rpc('soilnote_lock_list',{p_code:code});
       if(error)throw error;
+      if(version!==refreshVersion||code!==shareCode())return;
       lastLocks=Array.isArray(data)?data:[];
       decorateProjectCards();
-    }catch(err){console.warn('[SoilNote Project Lock] list',err);}
+    }catch(err){
+      console.warn('[SoilNote Project Lock] list',err);
+      decorateProjectCards(); // Expired cached badges must not remain visible.
+    }
   }
 
   function setDetailLockPending(pending){
@@ -300,12 +329,18 @@
     if(activeProjectLock&&String(activeProjectLock.projectId)===id)return;
     if(ensuringProjectId===id)return;
     ensuringProjectId=id;
+    const version=navigationVersion;
+    const code=shareCode();
     setDetailLockPending(true);
     const result=await acquireProjectLock(id,false);
     ensuringProjectId='';
     setDetailLockPending(false);
+    if(version!==navigationVersion||String(currentProjectSafe()?.id||'')!==id){
+      if(result.acquired)await releaseProjectLock({projectId:id,code});
+      return;
+    }
     if(result.acquired){
-      activeProjectLock={projectId:id};
+      activeProjectLock={projectId:id,code};
       startHeartbeat();
       refreshLocks();
       return;
@@ -326,13 +361,17 @@
     event.preventDefault();
     event.stopImmediatePropagation();
 
-    const known=projectLock(projectId);
-    if(known&&String(known.device_id)!==deviceId()){
-      alert(`${known.display_name||'別の共有者'}さんがこの工事を作業中です。\n二重作業防止のため、今は開けません。`);
+    if(openingProject)return;
+    openingProject=true;
+    const version=navigationVersion;
+    const code=shareCode();
+    // Always ask the server; a cached badge can outlive a successful release.
+    const result=await acquireProjectLock(projectId,false);
+    openingProject=false;
+    if(version!==navigationVersion){
+      if(result.acquired)await releaseProjectLock({projectId,code});
       return;
     }
-
-    const result=await acquireProjectLock(projectId,false);
     if(!result.acquired){
       if(!result.cancelled&&!result.error)alert(`${result.holderName||'別の共有者'}さんがこの工事を作業中です。\n二重作業防止のため、今は開けません。`);
       await refreshLocks();
@@ -340,7 +379,7 @@
     }
 
     if(activeProjectLock&&String(activeProjectLock.projectId)!==projectId)await releaseProjectLock(activeProjectLock);
-    activeProjectLock={projectId};
+    activeProjectLock={projectId,code};
     startHeartbeat();
     bypassCards.add(card);
     card.click();
@@ -439,7 +478,19 @@
     try{renderTests();renderProjects();}catch{}
   }
 
+  function leaveProject(){
+    navigationVersion++;
+    releaseProjectLock();
+  }
+
   function installHooks(){
+    if(typeof closeProject==='function'){
+      const baseCloseProject=closeProject;
+      closeProject=function(){
+        leaveProject();
+        return baseCloseProject.apply(this,arguments);
+      };
+    }
     if(typeof renderProjects==='function'){
       const baseRenderProjects=renderProjects;
       renderProjects=function(){
@@ -463,7 +514,7 @@
     if(refreshTimer)clearInterval(refreshTimer);
     refreshTimer=setInterval(()=>{
       if(document.visibilityState==='visible'){
-        if(activeProjectLock)renewActiveProjectLock(true);
+        if(activeProjectLock&&String(currentProjectSafe()?.id||'')!==String(activeProjectLock.projectId))releaseProjectLock();
         refreshLocks();
       }
     },5000);
@@ -478,16 +529,20 @@
     renderDetailWorkflow();
 
     document.addEventListener('click',handleProjectCardClick,true);
-    document.getElementById('backBtn')?.addEventListener('click',()=>{releaseProjectLock();});
-    document.getElementById('deleteProjectBtn')?.addEventListener('click',()=>{setTimeout(()=>releaseProjectLock(),100);});
-    window.addEventListener('pagehide',()=>{releaseProjectLock();});
-    window.addEventListener('beforeunload',()=>{releaseProjectLock();});
+    document.getElementById('backBtn')?.addEventListener('click',leaveProject,true);
+    document.getElementById('deleteProjectBtn')?.addEventListener('click',()=>{
+      setTimeout(()=>{if(!currentProjectSafe()&&activeProjectLock)leaveProject();},100);
+    });
+    window.addEventListener('pagehide',leaveProject);
+    window.addEventListener('beforeunload',leaveProject);
     document.addEventListener('visibilitychange',()=>{
       if(document.visibilityState==='visible'){
         if(activeProjectLock)renewActiveProjectLock(true);
+        else if(currentProjectSafe())ensureCurrentProjectLock();
         refreshLocks();
       }
     });
+    window.addEventListener('pageshow',()=>{if(currentProjectSafe()&&!activeProjectLock)ensureCurrentProjectLock();});
 
     if(!/^https:\/\//.test(SUPABASE_URL)||!SUPABASE_KEY.startsWith('sb_publishable_'))return;
     try{
