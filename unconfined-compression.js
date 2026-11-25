@@ -149,8 +149,8 @@
     const sample=form()?.elements.sample.value||'';
     root.innerHTML=levelValues.map(v=>{
       const key=levelKey(v),cached=levelCache.get(key),saved=latestUnconfined(sample,v);
-      const status=saved?'✓':(hasLevelData(cached)?'入力中':'');
-      return `<button type="button" data-level-key="${esc(key)}" class="unconfined-level-tab ${activeLevel===key?'active':''}">${esc(Number(v).toLocaleString('ja-JP'))} ${status}</button>`;
+      const status=hasLevelData(cached)?'入力中':(saved?'保存済':'未入力');
+      return `<button type="button" data-level-key="${esc(key)}" class="unconfined-level-tab ${activeLevel===key?'active':''}" aria-pressed="${activeLevel===key}"><span>${esc(Number(v).toLocaleString('ja-JP'))}</span><small>${status}</small></button>`;
     }).join('');
   }
   function switchLevel(value,saveCurrent=true){
@@ -266,11 +266,27 @@
       .unconfined-top{display:grid;grid-template-columns:1.3fr 1fr 1fr 1fr 1fr;gap:8px}.unconfined-specimens{display:grid;gap:12px;margin-top:12px}.unconfined-specimen{padding:13px;border:1px solid var(--line,#dfe7e3);border-radius:15px;background:#fff}.unconfined-main-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:7px}.unconfined-lower{display:grid;grid-template-columns:180px 1fr;gap:12px;margin-top:10px}.unconfined-sketch-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:5px}.unconfined-sketch-head button{padding:5px 8px;font-size:11px}.unconfined-specimen canvas{display:block;width:150px;height:210px;border:1px dashed #7d8783;background:#fff;touch-action:pan-y}.unconfined-moisture{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;align-content:start}.unconfined-moisture>strong{grid-column:1/-1}.unconfined-w{display:flex;align-items:center;justify-content:space-between;border:1px solid var(--line,#dfe7e3);border-radius:11px;padding:8px 10px;background:#f8fbfa}.unconfined-w strong{color:var(--accent-dark,#0b5136)}@media(max-width:900px){.unconfined-top{grid-template-columns:1fr 1fr}.unconfined-main-grid{grid-template-columns:repeat(3,1fr)}}@media(max-width:560px){.unconfined-top,.unconfined-main-grid,.unconfined-lower{grid-template-columns:1fr}.unconfined-moisture{grid-template-columns:1fr 1fr}.unconfined-specimen canvas{width:100%;max-width:220px;height:250px}}
 
       .unconfined-level-switch{margin:12px 0;padding:12px;border:1px solid #d9e6df;border-radius:14px;background:#f7faf8}.unconfined-level-head{display:flex;justify-content:space-between;align-items:center;gap:10px}.unconfined-level-head strong{font-size:14px}.unconfined-level-head button{font-size:12px;padding:6px 10px}.unconfined-level-buttons{display:flex;gap:8px;overflow-x:auto;padding:12px 0 7px}.unconfined-level-tab{min-width:85px;padding:10px 16px;white-space:nowrap;border:1px solid #c9d8d0;border-radius:11px;background:#fff;font-weight:800;color:#51615a}.unconfined-level-tab.active{background:#16745c;color:#fff;border-color:#16745c}.unconfined-level-switch small{display:block;color:#68756e;font-size:11px;line-height:1.5}.unconfined-level-switch #unconfinedLevelNote{font-weight:700;color:#24644e;margin-bottom:3px}.unconfined-card-levels{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:10px}.unconfined-card-levels button{padding:7px 11px;border:1px solid #a9caba;border-radius:9px;color:#2a5c49;background:#f4faf7;font-weight:800;font-size:12px}.unconfined-card-levels button.active{background:#176c55;color:#fff}
+      /* Keep all dosage tabs readable and avoid iOS date control intrinsic overflow. */
+      #unconfinedDialog,#unconfinedForm,#unconfinedForm label,#unconfinedForm section,#unconfinedForm .unconfined-top,#unconfinedForm .unconfined-main-grid,#unconfinedForm .unconfined-lower,#unconfinedForm .unconfined-moisture{box-sizing:border-box;min-width:0;max-width:100%}
+      #unconfinedForm input,#unconfinedForm select{box-sizing:border-box;min-width:0;max-width:100%}
+      #unconfinedForm input[type=date]{display:block;width:100%;min-width:0;max-width:100%;text-align:center}
+      #unconfinedForm input[type=date]::-webkit-date-and-time-value{min-width:0;text-align:center}
+      #unconfinedForm .unconfined-level-head{flex-wrap:wrap}
+      #unconfinedForm .unconfined-level-buttons{display:grid;grid-template-columns:repeat(auto-fit,minmax(72px,1fr));gap:6px;overflow:visible}
+      #unconfinedForm .unconfined-level-tab{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;width:100%;min-width:0;padding:7px 3px;font-size:16px;line-height:1.2;white-space:normal;overflow-wrap:anywhere}
+      #unconfinedForm .unconfined-level-tab small{font-size:10px;color:inherit;line-height:1.2}
+      @media(max-width:560px){#unconfinedForm .unconfined-top,#unconfinedForm .unconfined-main-grid,#unconfinedForm .unconfined-lower{grid-template-columns:minmax(0,1fr)}#unconfinedForm .unconfined-moisture{grid-template-columns:repeat(2,minmax(0,1fr))}#unconfinedForm .dialog-actions{display:grid;grid-template-columns:1fr 1fr;gap:6px}#unconfinedForm .dialog-actions button{min-width:0;padding:10px 6px;white-space:normal;font-size:14px}#unconfinedSubmit{grid-column:1/-1}}
     `;document.head.appendChild(style);
     const f=form();f.addEventListener('input',updatePreview);
     f.elements.sample.addEventListener('change',()=>{
-      levelCache.clear();activeLevel=null;draftOriginId=null;
+      levelCache.clear();activeLevel=null;draftOriginId=null;delete f.dataset.draftTestId;
       syncDosages();switchLevel(levelValues[0],false);
+      const pending=window.SoilNoteUnconfinedDraft.resolve();
+      if(pending){
+        draftOriginId=pending.id;f.dataset.draftTestId=pending.id;
+        const value=n(pending.dosage)??n(pending.draftFields?.dosage)??levelValues[0];
+        window.SoilNoteUnconfinedDraft.restore(pending.draftExtra||{active:String(value),levels:[value],cache:{[String(value)]:{fields:pending.draftFields||{},sketches:[]}}});
+      }
     });
     f.elements.dosage.addEventListener('change',()=>{
       const v=selectedDosage();
@@ -297,7 +313,7 @@
 
   function reset(){
     state.editingTestId=null;draftOriginId=null;levelCache.clear();activeLevel=null;
-    const f=form();f.reset();sketchState.splice(0,3,[],[],[]);[1,2,3].forEach(i=>setSketchMode(i,false));syncSample();
+    const f=form();delete f.dataset.draftTestId;f.reset();sketchState.splice(0,3,[],[],[]);[1,2,3].forEach(i=>setSketchMode(i,false));syncSample();
     document.getElementById('unconfinedTitle').textContent='一軸圧縮試験';
     document.getElementById('unconfinedSubmit').textContent='入力済み水準をまとめて保存';
     switchLevel(levelValues[0],false);
@@ -318,6 +334,11 @@
 
   function openEdit(id){
     const p=currentProject(),t=p?.tests?.find(x=>x.id===id&&x.type===TYPE);if(!t)return;
+    if(!t.draft){
+      const pending=(p.tests||[]).filter(x=>x.type===TYPE&&x.draft&&String(x.sample||'')===String(t.sample||'')&&(!t.sampleId||!x.sampleId||String(x.sampleId)===String(t.sampleId)))
+        .sort((a,b)=>String(b.draftSavedAt||b.updatedAt||b.createdAt||'').localeCompare(String(a.draftSavedAt||a.updatedAt||a.createdAt||'')))[0];
+      if(pending){openEdit(pending.id);if(n(t.dosage)!==null)switchLevel(t.dosage);return;}
+    }
     reset();levelCache.clear();activeLevel=null;
     draftOriginId=t.draft?id:null;
     document.getElementById('unconfinedTitle').textContent='一軸圧縮試験を訂正';
@@ -327,6 +348,11 @@
     syncDosages(value);
     switchLevel(value,false);
     state.editingTestId=t.id;
+    if(t.draft){
+      const f=form();f.dataset.draftTestId=t.id;
+      const legacy={active:String(value),levels:[value],cache:{[String(value)]:{fields:t.draftFields||{},sketches:[]}}};
+      window.SoilNoteUnconfinedDraft.restore(t.draftExtra||legacy);
+    }
     dialog().showModal();
   }
 
@@ -366,6 +392,11 @@
         Object.assign(existing,payload,{updatedAt:now});
         ['draft','draftFields','draftFieldLabels','draftSavedAt','draftExtra'].forEach(k=>delete existing[k]);
       }else p.tests.push({id:uid(),type:TYPE,...payload,createdAt:now});
+    }
+    // すべて既存の完成水準へ上書きした場合も、今回使用した途中保存だけを終了する。
+    if(draftOriginId&&!draftReused&&p.tests.some(t=>t.id===draftOriginId&&t.type===TYPE&&t.draft)){
+      p.deletedTestIds={...(p.deletedTestIds||{}),[draftOriginId]:now};
+      p.tests=p.tests.filter(t=>t.id!==draftOriginId);
     }
     p.updatedAt=now;saveData();dialog().close();reset();renderTests();
   }
@@ -494,6 +525,12 @@
   // 破壊スケッチはフォーム要素ではないので、途中保存時に線データも退避する。
 
   window.SoilNoteUnconfinedDraft={
+    resolve:()=>{
+      const f=form(),p=currentProject(),sample=f?.elements.sample.value||'';
+      const sampleId=f?.elements.sample.selectedOptions[0]?.dataset.sampleId;
+      const candidates=(p?.tests||[]).filter(t=>t.type===TYPE&&t.draft&&String(t.sample||'')===sample&&(!sampleId||!t.sampleId||String(t.sampleId)===sampleId));
+      return candidates.find(t=>t.id===draftOriginId)||candidates.sort((a,b)=>String(b.draftSavedAt||b.updatedAt||b.createdAt||'').localeCompare(String(a.draftSavedAt||a.updatedAt||a.createdAt||'')))[0]||null;
+    },
     snapshot:()=>{
       if(activeLevel!==null)levelCache.set(activeLevel,captureLevel());
       return {sketches:clone(sketchState),levels:[...levelValues],active:activeLevel,

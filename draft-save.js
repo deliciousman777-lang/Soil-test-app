@@ -149,6 +149,8 @@
     const now=new Date().toISOString();
     const sample=String(fields.sample??'').trim();
     if(cfg.type==='unconfined-compression'){
+      if(!document.getElementById(cfg.dialog)?.open)return;
+      if(!sample){alert('試料を選択してください。');return;}
       const sampleId=form.elements.sample?.selectedOptions?.[0]?.dataset?.sampleId;
       if(sampleId)p.activeSampleId=sampleId;
     }
@@ -159,6 +161,11 @@
     const draftId=form.dataset.draftTestId;
     const linked=draftId?testById(draftId):null;
     if(linked?.type===cfg.type) test=linked;
+    if(cfg.type==='unconfined-compression'){
+      // 水準ごとの完成済みレコードは途中保存に変換しない。
+      // 同じ試料の途中保存IDを再利用する。
+      test=window.SoilNoteUnconfinedDraft?.resolve?.()||null;
+    }
     if(!test&&cfg.type==='grain'){
       test=window.SoilNoteSedimentationWorkbench?.resolveGrainDraft?.(fields,p.id)||null;
     }
@@ -194,6 +201,11 @@
         draftSavedAt:now,createdAt:now,updatedAt:now
       };
       p.tests.push(test);
+    }
+    if(cfg.type==='unconfined-compression'){
+      const sampleId=form.elements.sample?.selectedOptions?.[0]?.dataset?.sampleId;
+      if(sampleId)test.sampleId=sampleId;
+      form.dataset.draftTestId=test.id;
     }
     p.updatedAt=now;
     saveData();
@@ -368,6 +380,8 @@
     const id=attr?.value;if(!id)return;
     const t=testById(id);if(!t?.draft)return;
     const cfg=configForType(t.type);if(!cfg)return;
+    // 一軸は openEdit 内で同期的に復元（＋試験や水準ボタンからの再開も共通）。
+    if(cfg.type==='unconfined-compression')return;
     setTimeout(()=>restoreDraft(t,cfg),0);
   },true);
 
@@ -376,6 +390,14 @@
     if(e.key!=='Enter'||e.isComposing||e.target?.tagName==='TEXTAREA')return;
     const activeForm=e.target?.closest?.('form');
     const cfg=CONFIGS[activeForm?.id];
+    if(cfg?.type==='unconfined-compression'&&e.target?.matches?.('input,select')){
+      // iPhone の入力確定は保存ではない。次の入力欄へ移動する。
+      e.preventDefault();e.stopImmediatePropagation();
+      const inputs=[...activeForm.querySelectorAll('input,select')].filter(el=>!el.disabled&&!el.readOnly&&el.getClientRects().length);
+      const index=inputs.indexOf(e.target);
+      if(index>=0&&inputs[index+1])inputs[index+1].focus();else e.target.blur();
+      return;
+    }
     if(cfg&&hasPendingDryMass(activeForm,cfg)){
       e.preventDefault();e.stopImmediatePropagation();saveDraft(activeForm,cfg);return;
     }
