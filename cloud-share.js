@@ -14,6 +14,7 @@
   let shareCode = '';
   let workspace = null;
   let syncing = false;
+  let syncAgain = false;
   let saveTimer = null;
   let pollTimer = null;
   let originalSaveData = null;
@@ -328,20 +329,27 @@
     try{return Array.isArray(state?.data?.projects)?state.data.projects:[];}catch{return [];}
   }
 
-  async function uploadProject(p){
+  async function uploadProject(p,expected){
     const stamp=projectStamp(p)||Date.now();
-    const {error}=await client.rpc('soilnote_share_upsert',{
+    const {data,error}=await client.rpc('soilnote_share_upsert_cas',{
       p_code:shareCode,
       p_project_id:String(p.id),
       p_payload:p,
-      p_updated_at:new Date(stamp).toISOString()
+      p_updated_at:new Date(stamp).toISOString(),
+      p_expect_exists:!!expected,
+      p_expected_updated_at:expected?.updated_at??null,
+      p_expected_deleted_at:expected?.deleted_at??null,
+      p_expected_payload:expected?.payload??null
     });
     if(error)throw error;
+    return data===true;
   }
 
   async function syncNow(showMessage=false){
-    if(!client||!workspace||!shareCode||syncing)return;
+    if(!client||!workspace||!shareCode)return;
+    if(syncing){syncAgain=true;return;}
     syncing=true;
+    syncAgain=false;
     if(showMessage){setTopStatus('syncing','同期中…');message('同期中…');}
     try{
       const {data:rows,error}=await client.rpc('soilnote_share_projects',{p_code:shareCode});
@@ -375,7 +383,14 @@
       }
 
       const unique=[...new Map(uploads.map(p=>[String(p.id),p])).values()];
-      for(const p of unique)await uploadProject(p);
+      for(const p of unique){
+        if(!await uploadProject(p,remoteMap.get(String(p.id))))syncAgain=true;
+      }
+      if(syncAgain){
+        setTopStatus('syncing','同期中…');
+        if(showMessage)message('ほかの端末の更新を統合しています。');
+        return;
+      }
 
       setTopStatus('online',`共有：${workspace.name}`);
       if(showMessage)message(`同期完了（工事 ${local.length}件）`,'ok');
@@ -383,7 +398,7 @@
       console.error('[SoilNote Share] sync',err);
       setTopStatus('error','同期エラー');
       if(showMessage)message('同期に失敗しました。通信状態を確認してください。','error');
-    }finally{syncing=false;}
+    }finally{syncing=false;if(syncAgain)queueSync();}
   }
 
   function queueSync(){

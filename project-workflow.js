@@ -1,5 +1,5 @@
-// SoilNote project workflow folders + exclusive project work lock.
-// Folders: testing -> completed -> organized. Shared users cannot work on the same project at once.
+// SoilNote workflow folders. Testing permits different trial kinds in parallel.
+// Completed/organized projects retain the project lock.
 (function(){
   'use strict';
 
@@ -155,6 +155,10 @@
     return lastLocks.find(l=>String(l.project_id)===String(projectId)&&String(l.test_id)===PROJECT_LOCK_ID&&timeOf(l.expires_at)>Date.now()) || null;
   }
 
+  const trialLabels={moisture:'含水比',grain:'粒度',pd:'土粒子の密度',atterberg:'液塑性', 'cone-index':'コーン指数',compaction:'締固め','mix-design':'配合','unconfined':'一軸圧縮'};
+  function trialLocks(projectId){
+    return lastLocks.filter(l=>String(l.project_id)===String(projectId)&&String(l.test_id).startsWith('__trial__:')&&timeOf(l.expires_at)>Date.now());
+  }
   function addBadge(card,className,text){
     const badge=document.createElement('span');
     badge.className=className;
@@ -182,7 +186,12 @@
       const def=FOLDERS.find(x=>x.key===status);
       addBadge(card,`workflow-badge ${status}`,`${def?.icon||''} ${def?.label||status}`.trim());
 
-      const lock=projectLock(project.id);
+      for(const trial of trialLocks(project.id)){
+        const own=String(trial.device_id)===mine;
+        const kind=String(trial.test_id).slice('__trial__:'.length);
+        addBadge(card,`project-work-badge ${own?'mine':'other'}`,`${trialLabels[kind]||kind}：${own?'自分':trial.display_name||'他端末'} 作業中`);
+      }
+      const lock=workflowStatus(project)==='testing'?null:projectLock(project.id);
       if(lock){
         const isMine=String(lock.device_id)===mine;
         addBadge(card,`project-work-badge ${isMine?'mine':'other'}`,isMine?'● 自分が作業中':`🔒 ${lock.display_name||'他端末'}さん作業中`);
@@ -325,6 +334,10 @@
   async function ensureCurrentProjectLock(){
     const project=currentProjectSafe();
     if(!project||!shareCode()||!client)return;
+    if(workflowStatus(project)==='testing'){
+      if(activeProjectLock)await releaseProjectLock(activeProjectLock);
+      return;
+    }
     const id=String(project.id||'');
     if(activeProjectLock&&String(activeProjectLock.projectId)===id)return;
     if(ensuringProjectId===id)return;
@@ -357,6 +370,8 @@
     if(bypassCards.has(card)){bypassCards.delete(card);return;}
     const projectId=String(card.dataset.projectId||'');
     if(!projectId)return;
+    const project=projects().find(p=>String(p.id)===projectId);
+    if(workflowStatus(project)==='testing')return;
 
     event.preventDefault();
     event.stopImmediatePropagation();
@@ -386,6 +401,24 @@
     refreshLocks();
   }
 
+  // Whole-project operations must not interrupt a colleague's open trial.
+  const projectActionBypass=new WeakSet();
+  async function guardProjectAction(event){
+    const button=event.target.closest?.('#editProjectInfoBtn,#deleteProjectBtn,#completeProjectBtn,#cancelProjectCompletion,#markProjectOrganized,#undoProjectOrganized,#addSampleBtn,[data-edit-sample]');
+    if(!button||!shareCode())return;
+    if(projectActionBypass.has(button)){projectActionBypass.delete(button);return;}
+    const p=currentProjectSafe();if(!p||workflowStatus(p)!=='testing')return;
+    event.preventDefault();event.stopImmediatePropagation();
+    const code=shareCode(),id=String(p.id);
+    try{
+      const {data,error}=await rpc('soilnote_lock_list',{p_code:code});
+      if(error)throw error;
+      if(code!==shareCode()||String(currentProjectSafe()?.id)!==id||!button.isConnected)return;
+      const other=(data||[]).find(l=>String(l.project_id)===id&&String(l.device_id)!==deviceId()&&timeOf(l.expires_at)>Date.now());
+      if(other){alert(`${other.display_name||'他の作業者'}さんが試験中です。工事情報の変更・完了・削除は試験を終えてから行ってください。`);return;}
+      projectActionBypass.add(button);button.click();
+    }catch(error){console.error('[SoilNote Project Action]',error);alert('共有状態を確認できません。通信状態を確認してください。');}
+  }
   function lockHeldForCurrent(){
     if(!shareCode())return true;
     const p=currentProjectSafe();
@@ -434,7 +467,7 @@
     const status=workflowStatus(project);
     const name=String(project.organizedByName||'').trim();
     if(status==='testing'){
-      panel.innerHTML='<div class="project-workflow-copy"><strong>📂 試験中</strong><small>予定した試験が終わると「試験完了」に移動できます。共有中はこの工事を1人だけが作業できます。</small></div>';
+      panel.innerHTML='<div class="project-workflow-copy"><strong>📂 試験中</strong><small>予定した試験が終わると「試験完了」に移動できます。共有中も別の試験項目は同時に作業できます。</small></div>';
     }else if(status==='completed'){
       panel.innerHTML='<div class="project-workflow-copy"><strong>✅ 試験完了</strong><small>試験結果の確認・成果データの整理が終わったら、整理済みに移動してください。</small></div><button type="button" class="primary" id="markProjectOrganized">📁 データ整理済みにする</button>';
       document.getElementById('markProjectOrganized')?.addEventListener('click',markOrganized);
@@ -529,6 +562,7 @@
     renderDetailWorkflow();
 
     document.addEventListener('click',handleProjectCardClick,true);
+    document.addEventListener('click',guardProjectAction,true);
     document.getElementById('backBtn')?.addEventListener('click',leaveProject,true);
     document.getElementById('deleteProjectBtn')?.addEventListener('click',()=>{
       setTimeout(()=>{if(!currentProjectSafe()&&activeProjectLock)leaveProject();},100);

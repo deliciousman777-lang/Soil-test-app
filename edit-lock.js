@@ -1,5 +1,5 @@
 // SoilNote collaborative edit lock
-// Prevents two devices from editing the same existing test at the same time.
+// Prevents two devices from working on the same trial kind in one project.
 (function(){
   'use strict';
 
@@ -18,6 +18,9 @@
   let heartbeatTimer = null;
   let refreshTimer = null;
   let lastLocks = [];
+  let opening = false;
+  let lockQueue=Promise.resolve();
+  function queueLock(fn){const next=lockQueue.then(fn,fn);lockQueue=next.catch(()=>{});return next;}
   const bypassButtons = new WeakSet();
   const bypassForms = new WeakSet();
 
@@ -51,15 +54,24 @@
     try{return String(state?.currentProjectId||'');}catch{return '';}
   }
 
+  const trialDefs={
+    moisture:['addMoistureBtn','moistureDialog'],grain:['addGrainBtn','grainDialog'],
+    pd:['addParticleDensityBtn','particleDensityDialog'],atterberg:['addAtterbergBtn','atterbergDialog'],
+    'cone-index':['addConeIndexBtn','coneIndexDialog'],compaction:['addCompactionBtn','compactionDialog'],
+    'mix-design':['addMixDesignBtn','mixDesignDialog'],unconfined:['addUnconfinedBtn','unconfinedDialog']
+  };
   function targetFromButton(button){
     if(!button)return null;
+    const projectId=currentProjectId();
+    const kind=Object.keys(trialDefs).find(k=>button.id===trialDefs[k][0]||button.hasAttribute('data-edit-'+k));
+    if(kind)return {projectId,testId:'__trial__:'+kind,dialogId:trialDefs[kind][1]};
     for(const attr of [...button.attributes]){
       if(attr.name.startsWith('data-edit-')&&attr.value){
-        return {projectId:currentProjectId(),testId:String(attr.value)};
+        return {projectId,testId:String(attr.value)};
       }
     }
     const explicit=button.getAttribute('data-test-id');
-    return explicit?{projectId:currentProjectId(),testId:String(explicit)}:null;
+    return explicit?{projectId,testId:String(explicit)}:null;
   }
 
   function loadScript(src){
@@ -103,13 +115,13 @@
       if(!quiet)window.alert('編集者名を入力しないと共有編集中のロックを開始できません。');
       return {acquired:false,cancelled:true};
     }
-    const {data,error}=await rpc('soilnote_lock_acquire',{
+    const {data,error}=await queueLock(()=>rpc('soilnote_lock_acquire',{
       p_code:code,
       p_project_id:String(projectId),
       p_test_id:String(testId),
       p_device_id:deviceId(),
       p_display_name:name
-    });
+    }));
     if(error){
       console.error('[SoilNote Lock] acquire',error);
       if(!quiet)window.alert('編集中ロックの確認に失敗しました。通信状態を確認してください。');
@@ -128,16 +140,16 @@
   async function releaseLock(lock=activeLock){
     if(!lock)return;
     if(activeLock===lock)activeLock=null;
-    stopHeartbeat();
-    const code=shareCode();
+    if(!activeLock)stopHeartbeat();
+    const code=lock.code||shareCode();
     if(!code)return;
     try{
-      await rpc('soilnote_lock_release',{
+      await queueLock(()=>rpc('soilnote_lock_release',{
         p_code:code,
         p_project_id:String(lock.projectId),
         p_test_id:String(lock.testId),
         p_device_id:deviceId()
-      });
+      }));
     }catch(err){console.warn('[SoilNote Lock] release',err);}
     refreshLocks();
   }
@@ -155,6 +167,7 @@
     const lock=activeLock;
     if(!lock)return true;
     const result=await acquireLock(lock.projectId,lock.testId,true);
+    if(activeLock!==lock)return false;
     if(result.acquired)return true;
     activeLock=null;
     stopHeartbeat();
@@ -170,15 +183,16 @@
     return false;
   }
 
-  function attachDialogRelease(){
+  function attachDialogRelease(lock){
     setTimeout(()=>{
       const dialogs=[...document.querySelectorAll('dialog[open]')].filter(d=>d.id!=='cloudShareDialog');
-      activeDialog=dialogs[dialogs.length-1]||null;
-      if(!activeDialog)return;
+      if(activeLock!==lock)return;
+      activeDialog=lock.dialogId?document.getElementById(lock.dialogId):dialogs[dialogs.length-1]||null;
+      if(!activeDialog?.open){activeDialog=null;releaseLock(lock);return;}
       const d=activeDialog;
       const onClose=()=>{
         if(activeDialog===d)activeDialog=null;
-        releaseLock();
+        releaseLock(lock);
       };
       d.addEventListener('close',onClose,{once:true});
     },0);
@@ -195,7 +209,16 @@
     e.preventDefault();
     e.stopImmediatePropagation();
 
-    const result=await acquireLock(target.projectId,target.testId,false);
+    if(opening||activeLock)return;
+    opening=true;
+    const code=shareCode();
+    let result;
+    try{result=await acquireLock(target.projectId,target.testId,false);}
+    catch(error){console.error('[SoilNote Lock]',error);window.alert('共有ロックの確認に失敗しました。');return;}
+    finally{opening=false;}
+    if(result.acquired&&(code!==shareCode()||currentProjectId()!==target.projectId||!button.isConnected)){
+      await releaseLock({...target,code});return;
+    }
     if(!result.acquired){
       if(!result.cancelled&&!result.error){
         const who=result.holderName||'別のユーザー';
@@ -205,11 +228,12 @@
       return;
     }
 
-    activeLock={projectId:target.projectId,testId:target.testId};
+    activeLock={...target,code};
+    const lock=activeLock;
     startHeartbeat();
     bypassButtons.add(button);
     button.click();
-    attachDialogRelease();
+    attachDialogRelease(lock);
     refreshLocks();
   }
 
@@ -247,7 +271,7 @@
       const target=targetFromButton(button);
       if(!target?.testId)return;
       if(!button.dataset.lockOriginalText)button.dataset.lockOriginalText=button.textContent||'訂正';
-      const lock=lastLocks.find(l=>String(l.project_id)===String(target.projectId)&&String(l.test_id)===String(target.testId));
+      const lock=lastLocks.find(l=>String(l.project_id)===String(target.projectId)&&String(l.test_id)===String(target.testId)&&new Date(l.expires_at).getTime()>Date.now());
       const other=lock&&String(lock.device_id)!==mine;
       if(other){
         button.disabled=true;
@@ -286,6 +310,7 @@
         }
       });
       window.addEventListener('focus',()=>{if(activeLock)renewActiveLock(true);refreshLocks();});
+      window.addEventListener('pagehide',()=>{if(activeLock)releaseLock();});
       startRefresh();
       await refreshLocks();
     }catch(err){console.error('[SoilNote Lock] boot',err);}
