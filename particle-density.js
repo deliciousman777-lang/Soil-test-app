@@ -121,6 +121,15 @@
       style.id = 'particleDensityStyles';
       style.textContent = `
         .pd-list{display:grid;gap:16px;margin-top:14px}.pd-auto-grid,.pd-result-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin:10px 0}.pd-input-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:12px 0}.pd-auto-grid>div,.pd-result-grid>div{border:1px solid var(--line);border-radius:12px;background:#f3f8f6;padding:10px}.pd-auto-grid span,.pd-result-grid span{display:block;color:var(--muted);font-size:11px;margin-bottom:4px}.pd-auto-grid strong,.pd-result-grid strong{color:var(--accent-dark);font-size:16px}.pd-result-grid{grid-template-columns:1fr 1fr 1.2fr}.pd-result-main{background:#e8f4ef!important;border-color:#a9cdbc!important}.pd-result-main strong{font-size:20px!important}.pd-card .specimen-head span{font-weight:800;color:var(--accent-dark)}
+        #testList>.pd-page-hidden{display:none!important}
+        .pd-pager{display:grid;gap:10px;padding:13px;border:1px solid var(--line,#dfe7e3);border-radius:14px;background:#f5fbf8;min-width:0}
+        .pd-pager-head{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;color:var(--accent-dark,#155343)}
+        .pd-page-count{font-size:13px;font-weight:700;white-space:nowrap}
+        .pd-page-label{min-width:0;font-size:13px}
+        .pd-page-select{display:block;width:100%;min-width:0;max-width:100%;min-height:48px;margin-top:4px;padding:8px;border:1px solid var(--line,#dfe7e3);border-radius:10px;background:#fff;font:inherit;font-size:16px;color:inherit}
+        .pd-page-controls{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+        .pd-page-controls button{min-height:44px;min-width:0;padding:8px}
+        .pd-page-controls button:disabled{opacity:.4;cursor:default}
         @media(max-width:800px){.pd-auto-grid{grid-template-columns:1fr 1fr}.pd-input-grid,.pd-result-grid{grid-template-columns:1fr}}
       `;
       document.head.appendChild(style);
@@ -276,7 +285,9 @@
       if(!test) return;
       Object.assign(test,payload,{updatedAt:now});
     }else{
-      p.tests.push({id:uid(),type:TYPE,...payload,createdAt:now});
+      const id=uid();
+      p.tests.push({id,type:TYPE,...payload,createdAt:now});
+      selectedDensityByProject.set(String(p.id), id);
     }
     p.updatedAt=now;
     saveData();
@@ -297,10 +308,82 @@
     return baseRenderMoistureCard(test);
   };
 
+  // Display-only paging: keep every original card and test ID, including drafts.
+  // Never change a sample assignment or save data when switching pages.
+  const selectedDensityByProject = new Map();
+
+  function renderDensityPager() {
+    const project = currentProject();
+    const root = document.getElementById('testList');
+    if (!project || !root) return;
+    const tests = (project.tests || []).filter(t => t.type === TYPE);
+    const byId = new Map(tests.map(t => [String(t.id), t]));
+    const entries = [...root.querySelectorAll('article.card')].map(card => {
+      const id = card.querySelector('[data-edit-pd]')?.dataset.editPd;
+      return byId.has(id) ? { card, id, test: byId.get(id) } : null;
+    }).filter(Boolean);
+    if (!entries.length) return;
+
+    // Use registration order, not last-edit order, so numbering stays stable.
+    const order = new Map(tests.map((t, i) => [String(t.id), i]));
+    const firstCard = entries[0].card;
+    entries.sort((a, b) => order.get(a.id) - order.get(b.id));
+    const key = String(project.id);
+    let index = entries.findIndex(e => e.id === selectedDensityByProject.get(key));
+    if (index < 0) index = Math.max(0, entries.findIndex(e => e.test.sampleId && e.test.sampleId === project.activeSampleId));
+
+    const nav = document.createElement('section');
+    nav.className = 'pd-pager';
+    nav.setAttribute('aria-label', '土粒子の密度試験の試料切替');
+    nav.innerHTML = '<div class="pd-pager-head"><strong>土粒子の密度試験</strong><span class="pd-page-count" aria-live="polite"></span></div><label class="pd-page-label">表示する試料<select class="pd-page-select" aria-label="土粒子密度の試料を選択"></select></label><div class="pd-page-controls"><button type="button" class="ghost pd-prev">‹ 前の試料</button><button type="button" class="ghost pd-next">次の試料 ›</button></div>';
+    const select = nav.querySelector('select');
+    const count = nav.querySelector('.pd-page-count');
+    const prev = nav.querySelector('.pd-prev');
+    const next = nav.querySelector('.pd-next');
+    entries.forEach(({test, id}, i) => {
+      const bottles = [0, 1, 2].map(j => test.draft
+        ? test.draftFields?.['pycNo_' + (j + 1)]
+        : test.measurements?.[j]?.pycnometerNo || test.measurements?.[j]?.containerNo
+      ).filter(v => v !== undefined && v !== null && String(v).trim() !== '');
+      const label = (i + 1) + '. ' + (test.sample || '試料名未入力') +
+        (bottles.length ? ' ｜ 瓶No. ' + bottles.join('/') : '') +
+        (test.draft ? ' ｜ 途中保存' : '');
+      const option = document.createElement('option');
+      option.value = id;
+      option.textContent = label;
+      select.appendChild(option);
+    });
+
+    // Keep the selected card immediately below the picker. All cards stay in
+    // the DOM so the existing edit, review, date and delete handlers still work.
+    root.insertBefore(nav, firstCard);
+    let anchor = nav;
+    for (const entry of entries) {
+      if (anchor.nextSibling !== entry.card) root.insertBefore(entry.card, anchor.nextSibling);
+      anchor = entry.card;
+    }
+
+    function show(i) {
+      if (!Number.isInteger(i) || i < 0 || i >= entries.length) return;
+      index = i;
+      selectedDensityByProject.set(key, entries[i].id);
+      entries.forEach(({card}, j) => card.classList.toggle('pd-page-hidden', j !== i));
+      select.value = entries[i].id;
+      count.textContent = (i + 1) + ' / ' + entries.length + ' 試料';
+      prev.disabled = i === 0;
+      next.disabled = i === entries.length - 1;
+    }
+    select.addEventListener('change', () => show(entries.findIndex(e => e.id === select.value)));
+    prev.addEventListener('click', () => show(index - 1));
+    next.addEventListener('click', () => show(index + 1));
+    show(index);
+  }
+
   const baseRenderTests=renderTests;
   renderTests=function(){
     baseRenderTests();
     document.querySelectorAll('[data-edit-pd]').forEach(btn=>btn.addEventListener('click',()=>openEdit(btn.dataset.editPd)));
+    renderDensityPager();
   };
 
   injectUI();
